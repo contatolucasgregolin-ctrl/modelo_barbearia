@@ -262,8 +262,9 @@ const Schedule = () => {
 
                 const dayInfo = getHoursForDate(selectedDate);
                 const isSundaySelected = dayInfo?.closed;
-                const todayStr = new Date().toISOString().split('T')[0];
-                const nowHour = new Date().getHours() + new Date().getMinutes() / 60;
+                const today = new Date();
+                const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                const nowHour = today.getHours() + today.getMinutes() / 60;
 
                 const allSlots = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
 
@@ -289,7 +290,7 @@ const Schedule = () => {
                                         setSelectedTime(null);
                                     }
                                 }}
-                                min={new Date().toISOString().split('T')[0]}
+                                min={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
                             />
                         </div>
 
