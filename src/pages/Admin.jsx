@@ -972,7 +972,8 @@ const SubscriptionsTab = () => {
                 status: selectedSub.status,
                 notes: selectedSub.notes,
                 features_usage: selectedSub.features_usage,
-                start_month: selectedSub.start_month
+                start_month: selectedSub.start_month,
+                preferred_barber: selectedSub.preferred_barber
             })
             .eq('id', selectedSub.id);
 

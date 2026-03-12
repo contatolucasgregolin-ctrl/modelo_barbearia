@@ -374,7 +374,7 @@ const Home = () => {
                                             onChange={e => setSubFormData({ ...subFormData, preferred_barber: e.target.value })}
                                         >
                                             <option value="">Qualquer um</option>
-                                            {siteData.artists?.map(artist => (
+                                            {artists?.map(artist => (
                                                 <option key={artist.id} value={artist.name}>{artist.name}</option>
                                             ))}
                                         </select>
