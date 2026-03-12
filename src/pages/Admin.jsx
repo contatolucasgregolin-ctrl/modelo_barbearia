@@ -1099,7 +1099,7 @@ const CustomersTab = () => {
     const fetchCustomers = useCallback(async () => {
         setLoading(true);
         let query = supabase.from('customers').select('*').order('name', { ascending: true });
-        if (search) query = query.ilike('name', `% ${search}% `);
+        if (search) query = query.ilike('name', `%${search}%`);
         const { data } = await query;
         setCustomers(data || []);
         setSelectedIds([]);
@@ -1892,7 +1892,7 @@ const FinancesTab = () => {
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, '0');
         const dd = String(today.getDate()).padStart(2, '0');
-        const fileName = `financeiro - estudio - ${yyyy} -${mm} -${dd}.xlsx`;
+        const fileName = `financeiro - barbearia - ${yyyy}-${mm}-${dd}.xlsx`;
 
         // Export
         XLSX.writeFile(workbook, fileName);
@@ -2287,7 +2287,7 @@ const GalleryTab = () => {
                             {uploading && <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '5px' }}>Otimizando p/ WebP e transferindo para nuvem...</div>}
                         </div>
                         <div className="form-group">
-                            <label>Categoria da Tatuagem *</label>
+                            <label>Categoria do Corte *</label>
                             <select className="form-input" value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })}>
                                 <option value="">Selecione uma categoria...</option>
                                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
