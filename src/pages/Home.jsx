@@ -16,7 +16,8 @@ const Home = () => {
         name: '',
         phone: '',
         artist_id: '',
-        start_month: ''
+        start_month: '',
+        observation: ''
     });
 
     // Populate artists for the dropdown
@@ -289,13 +290,17 @@ const Home = () => {
 
                                 // 2. Create subscription request
                                 if (customerId) {
+                                    const combinedNotes = subFormData.observation
+                                        ? `Assinatura solicitada via site (${selectedPlan.title})\n\nObservação do cliente:\n${subFormData.observation}`
+                                        : `Assinatura solicitada via site (${selectedPlan.title})`;
+
                                     await supabase.from('plan_subscriptions').insert([{
                                         customer_id: customerId,
                                         plan_id: selectedPlan.id,
                                         status: 'pending',
                                         artist_id: subFormData.artist_id || null,
                                         start_month: subFormData.start_month,
-                                        notes: `Assinatura solicitada via site (${selectedPlan.title})`
+                                        notes: combinedNotes
                                     }]);
                                 }
                             } catch (err) {
@@ -307,79 +312,92 @@ const Home = () => {
                             const barberName = artists.find(a => a.id === subFormData.artist_id)?.name || 'Qualquer profissional';
                             let msg = `Olá! Gostaria de assinar o plano *${selectedPlan.title}*.\n\n`;
                             msg += `*Meus Dados:*\nNome: ${subFormData.name}\n`;
-                            msg += `*Preferências:*\nProfissional: ${barberName}\nMês de Início: ${subFormData.start_month}\n\n`;
-                            msg += `Como fazemos para concluir a assinatura?`;
+                            msg += `*Preferências:*\nProfissional: ${barberName}\nMês de Início: ${subFormData.start_month}\n`;
+                            if (subFormData.observation) {
+                                msg += `\n*Observação:*\n${subFormData.observation}\n`;
+                            }
+                            msg += `\nComo fazemos para concluir a assinatura?`;
 
                             window.open(`https://api.whatsapp.com/send?phone=${studioPhone}&text=${encodeURIComponent(msg)}`, '_blank');
                             setIsPlanModalOpen(false);
-                            setSubFormData({ name: '', phone: '', artist_id: '', start_month: '' });
+                            setSubFormData({ name: '', phone: '', artist_id: '', start_month: '', observation: '' });
                         }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Plano Escolhido</label>
+                                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Plano Escolhido</label>
                                     <select
-                                        className="app-input"
                                         value={selectedPlan?.id || ''}
                                         onChange={(e) => setSelectedPlan(activePlans.find(p => p.id === e.target.value))}
                                         required
-                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
+                                        style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
                                     >
                                         {activePlans.map(p => (
-                                            <option key={p.id} value={p.id}>{p.title} - R${p.price}/{p.period}</option>
+                                            <option key={p.id} value={p.id} style={{ background: '#111' }}>{p.title} - R${p.price}/{p.period}</option>
                                         ))}
                                     </select>
                                 </div>
 
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Seu Nome Completo *</label>
-                                    <input
-                                        type="text"
-                                        className="app-input"
-                                        placeholder="Ex: João Silva"
-                                        value={subFormData.name}
-                                        onChange={e => setSubFormData({ ...subFormData, name: e.target.value })}
-                                        required
-                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
-                                    />
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Nome Completo *</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Ex: João Silva"
+                                            value={subFormData.name}
+                                            onChange={e => setSubFormData({ ...subFormData, name: e.target.value })}
+                                            required
+                                            style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>WhatsApp *</label>
+                                        <input
+                                            type="tel"
+                                            placeholder="(11) 99999-9999"
+                                            value={subFormData.phone}
+                                            onChange={e => setSubFormData({ ...subFormData, phone: e.target.value })}
+                                            required
+                                            style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Profissional Preferido</label>
+                                        <select
+                                            value={subFormData.artist_id}
+                                            onChange={e => setSubFormData({ ...subFormData, artist_id: e.target.value })}
+                                            style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
+                                        >
+                                            <option value="" style={{ background: '#111' }}>Qualquer profissional</option>
+                                            {artists.map(a => (
+                                                <option key={a.id} value={a.id} style={{ background: '#111' }}>{a.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Mês de Início</label>
+                                        <input
+                                            type="text"
+                                            value={subFormData.start_month}
+                                            onChange={e => setSubFormData({ ...subFormData, start_month: e.target.value })}
+                                            placeholder="Ex: Abril 2026"
+                                            style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
+                                        />
+                                    </div>
                                 </div>
 
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Seu WhatsApp *</label>
-                                    <input
-                                        type="tel"
-                                        className="app-input"
-                                        placeholder="(11) 99999-9999"
-                                        value={subFormData.phone}
-                                        onChange={e => setSubFormData({ ...subFormData, phone: e.target.value })}
-                                        required
-                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Profissional de Preferência</label>
-                                    <select
-                                        className="app-input"
-                                        value={subFormData.artist_id}
-                                        onChange={e => setSubFormData({ ...subFormData, artist_id: e.target.value })}
-                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
-                                    >
-                                        <option value="">Qualquer profissional (Sem preferência)</option>
-                                        {artists.map(a => (
-                                            <option key={a.id} value={a.id}>{a.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Mês de Início</label>
-                                    <input
-                                        type="text"
-                                        className="app-input"
-                                        value={subFormData.start_month}
-                                        onChange={e => setSubFormData({ ...subFormData, start_month: e.target.value })}
-                                        placeholder="Ex: Abril de 2026"
-                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
+                                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Observações (Opcional)</label>
+                                    <textarea
+                                        rows="2"
+                                        placeholder="Alguma restrição, alergia, ou dúvida específica?"
+                                        value={subFormData.observation}
+                                        onChange={e => setSubFormData({ ...subFormData, observation: e.target.value })}
+                                        style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s', resize: 'vertical' }}
                                     />
                                 </div>
 

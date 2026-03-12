@@ -4,7 +4,7 @@ import { supabase, uploadStorageFile, compressToWebP } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, CalendarDays, Scissors, Users, Settings, LogOut,
-    Plus, Trash2, Save, Pencil, X, Check, Ban, Trophy, Bell, RefreshCw, ChevronDown, User, TrendingUp, Image as ImageIcon, Tag,
+    Plus, Trash2, Save, Pencil, X, Check, Ban, Trophy, Bell, RefreshCw, ChevronDown, User, TrendingUp, Image as ImageIcon, Tag, Eye,
     ChevronLeft, ChevronRight, Maximize2, Sun, Moon, Download, Megaphone, Star
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -879,6 +879,7 @@ const SubscriptionsTab = () => {
     const [subscriptions, setSubscriptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [selectedSub, setSelectedSub] = useState(null);
 
     const fetchSubscriptions = async () => {
@@ -1023,7 +1024,7 @@ const SubscriptionsTab = () => {
             </div>
 
             {loading ? <p>Carregando assinantes...</p> : (
-                <div className="admin-card glass-panel" style={{ overflowX: 'auto' }}>
+                <div className="admin-table-wrap glass-panel" style={{ marginTop: '20px' }}>
                     <table className="admin-table">
                         <thead>
                             <tr>
@@ -1119,6 +1120,7 @@ const SubscriptionsTab = () => {
                                                 <RefreshCw size={16} />
                                             </button>
                                         )}
+                                        <button className="admin-action-btn" onClick={() => { setSelectedSub(sub); setIsDetailsModalOpen(true); }} title="Ver Detalhes"><Eye size={16} /></button>
                                         <button className="admin-action-btn" onClick={() => handleEdit(sub)} title="Editar"><Pencil size={16} /></button>
                                         <button className="admin-action-btn delete" onClick={() => handleDelete(sub.id)} title="Excluir"><Trash2 size={16} /></button>
                                         {sub.customer?.phone && sub.customer.phone !== '00000000000' && (
@@ -1208,6 +1210,48 @@ const SubscriptionsTab = () => {
                         </div>
                         <button type="submit" className="admin-btn-primary" style={{ width: '100%', marginTop: '16px' }}>Salvar Alterações</button>
                     </form>
+                </Modal>
+            )}
+
+            {isDetailsModalOpen && selectedSub && (
+                <Modal title={`Detalhes da Assinatura`} onClose={() => setIsDetailsModalOpen(false)}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', color: '#fff' }}>
+                        <div>
+                            <strong style={{ color: '#aaa', fontSize: '0.85rem' }}>Cliente</strong>
+                            <div style={{ fontSize: '1.1rem' }}>{selectedSub.customer?.name}</div>
+                            <div style={{ color: '#888' }}>{selectedSub.customer?.phone}</div>
+                        </div>
+                        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
+                            <strong style={{ color: '#aaa', fontSize: '0.85rem' }}>Plano Contratado</strong>
+                            <div style={{ fontSize: '1.1rem', color: 'var(--color-primary)' }}>{selectedSub.plan?.title}</div>
+                            <div style={{ color: '#ccc' }}>R$ {selectedSub.plan?.price} / {selectedSub.plan?.period}</div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div>
+                                <strong style={{ color: '#aaa', fontSize: '0.85rem' }}>Profissional Preferido</strong>
+                                <div>{selectedSub.artist?.name || 'Qualquer (Sem preferência)'}</div>
+                            </div>
+                            <div>
+                                <strong style={{ color: '#aaa', fontSize: '0.85rem' }}>Mês de Início</strong>
+                                <div>{selectedSub.start_month || 'Não informado'}</div>
+                            </div>
+                        </div>
+                        <div>
+                            <strong style={{ color: '#aaa', fontSize: '0.85rem' }}>Status Atual</strong>
+                            <div style={{ marginTop: '4px' }}>
+                                <StatusBadge status={selectedSub.status} />
+                            </div>
+                        </div>
+                        <div>
+                            <strong style={{ color: '#aaa', fontSize: '0.85rem' }}>Anotações / Observações</strong>
+                            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '8px', minHeight: '60px', whiteSpace: 'pre-wrap', color: '#ddd' }}>
+                                {selectedSub.notes || 'Nenhuma observação.'}
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{ marginTop: '24px', textAlign: 'right' }}>
+                        <button className="btn-app-secondary" onClick={() => setIsDetailsModalOpen(false)}>Fechar</button>
+                    </div>
                 </Modal>
             )}
         </div>
