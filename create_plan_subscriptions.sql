@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS public.plan_subscriptions (
     plan_id UUID REFERENCES public.plans(id) ON DELETE CASCADE NOT NULL,
     status TEXT DEFAULT 'pending'::text NOT NULL,
     notes TEXT,
+    activated_at TIMESTAMP WITH TIME ZONE,
+    expires_at TIMESTAMP WITH TIME ZONE,
     CONSTRAINT status_check CHECK (status IN ('pending', 'active', 'completed', 'cancelled'))
 );
 

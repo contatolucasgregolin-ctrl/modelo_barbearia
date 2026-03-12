@@ -16,8 +16,10 @@ const TODAY = new Date().toISOString().split('T')[0];
 const STATUS_LABELS = {
     pending: { label: 'Pendente', color: 'var(--color-primary)' },
     confirmed: { label: 'Confirmado', color: '#4ade80' },
+    active: { label: 'Ativo', color: '#4ade80' },
     cancelled: { label: 'Cancelado', color: '#ef4444' },
     finished: { label: 'Finalizado', color: '#a78bfa' },
+    expired: { label: 'Expirado', color: '#f87171' },
 };
 
 const StatusBadge = ({ status }) => {
@@ -932,13 +934,24 @@ const SubscriptionsTab = () => {
     };
 
     const handleApproveSubscription = async (sub) => {
-        if (!confirm(`Confirmar pagamento e ativar o plano ${sub.plan.title} para ${sub.customer.name}?`)) return;
+        const clientName = sub.customer?.name || 'Cliente';
+        if (!confirm(`Confirmar pagamento e ativar o plano ${sub.plan?.title || 'Plano'} para ${clientName}?`)) return;
 
         try {
-            // 1. Update subscription status
+            const now = new Date();
+            const expiresAt = new Date();
+            // Default to 1 month (30 days)
+            expiresAt.setDate(now.getDate() + 30);
+
+            // 1. Update subscription status and expiration dates
             const { error: subError } = await supabase
                 .from('plan_subscriptions')
-                .update({ status: 'active', notes: `${sub.notes || ''}\n[Sistema] Pago e aprovado em ${new Date().toLocaleDateString('pt-BR')}` })
+                .update({
+                    status: 'active',
+                    activated_at: now.toISOString(),
+                    expires_at: expiresAt.toISOString(),
+                    notes: `${sub.notes || ''}\n[Sistema] Pago e aprovado em ${now.toLocaleDateString('pt-BR')}`
+                })
                 .eq('id', sub.id);
 
             if (subError) throw subError;
@@ -947,8 +960,8 @@ const SubscriptionsTab = () => {
             const { error: finError } = await supabase
                 .from('finances')
                 .insert([{
-                    description: `Mensalidade: ${sub.plan.title} (${sub.customer.name})`,
-                    amount: sub.plan.price,
+                    description: `Mensalidade: ${sub.plan?.title || 'Plano'} (${clientName})`,
+                    amount: sub.plan?.price || 0,
                     type: 'income',
                     category: 'mensalidade'
                 }]);
@@ -961,6 +974,18 @@ const SubscriptionsTab = () => {
             console.error('Error approving sub:', error);
             alert('Erro ao processar aprovação: ' + error.message);
         }
+    };
+
+    const handleRenew = (sub) => {
+        const phone = (sub.customer?.phone || '').replace(/\D/g, '');
+        const msg = encodeURIComponent(`Olá ${sub.customer?.name}! Notei que sua assinatura do plano "${sub.plan?.title}" está para vencer ou já venceu. Gostaria de renovar por mais um período?`);
+        window.open(`https://wa.me/55${phone}?text=${msg}`, '_blank');
+    };
+
+    const calculateRemainingDays = (expiresAt) => {
+        if (!expiresAt) return null;
+        const diff = new Date(expiresAt) - new Date();
+        return Math.ceil(diff / (1000 * 60 * 60 * 24));
     };
 
     const handleDelete = async (id) => {
@@ -987,7 +1012,7 @@ const SubscriptionsTab = () => {
                                 <th>Data</th>
                                 <th>Cliente</th>
                                 <th>Plano</th>
-                                <th>Status</th>
+                                <th>Status / Validade</th>
                                 <th>Anotações</th>
                                 <th style={{ textAlign: 'right' }}>Ações</th>
                             </tr>
@@ -1011,7 +1036,26 @@ const SubscriptionsTab = () => {
                                         <strong>{sub.plan?.title || 'Plano Removido'}</strong>
                                         <div style={{ fontSize: '0.8rem', color: '#888' }}>R$ {sub.plan?.price} / {sub.plan?.period}</div>
                                     </td>
-                                    <td><StatusBadge status={sub.status} /></td>
+                                    <td>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            {(() => {
+                                                const days = calculateRemainingDays(sub.expires_at);
+                                                const effectiveStatus = (sub.status === 'active' && days !== null && days <= 0) ? 'expired' : sub.status;
+                                                return <StatusBadge status={effectiveStatus} />;
+                                            })()}
+                                            {sub.status === 'active' && sub.expires_at && (
+                                                <div style={{ fontSize: '0.7rem', fontWeight: 600, color: calculateRemainingDays(sub.expires_at) <= 3 ? '#ef4444' : '#888' }}>
+                                                    {(() => {
+                                                        const days = calculateRemainingDays(sub.expires_at);
+                                                        if (days > 1) return `${days} dias restantes`;
+                                                        if (days === 1) return `Vence Amanhã`;
+                                                        if (days === 0) return `Vence Hoje`;
+                                                        return 'Expirado';
+                                                    })()}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </td>
                                     <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#888' }}>
                                         {sub.notes || '-'}
                                     </td>
@@ -1026,13 +1070,23 @@ const SubscriptionsTab = () => {
                                                 <Check size={16} />
                                             </button>
                                         )}
+                                        {sub.status === 'active' && (
+                                            <button
+                                                className="admin-action-btn"
+                                                onClick={() => handleRenew(sub)}
+                                                title="Enviar Oferta de Renovação"
+                                                style={{ marginRight: 8, background: '#facc1522', color: '#facc15' }}
+                                            >
+                                                <RefreshCw size={16} />
+                                            </button>
+                                        )}
                                         <button className="admin-action-btn" onClick={() => handleEdit(sub)} title="Editar"><Pencil size={16} /></button>
                                         <button className="admin-action-btn delete" onClick={() => handleDelete(sub.id)} title="Excluir"><Trash2 size={16} /></button>
                                         {sub.customer?.phone && sub.customer.phone !== '00000000000' && (
                                             <button className="admin-action-btn bg-green-900/40 text-green-400 hover:bg-green-800/60" title="WhatsApp" onClick={() => {
                                                 const cleanPhone = (sub.customer.phone || '').replace(/\D/g, '');
                                                 window.open(`https://wa.me/55${cleanPhone}`, '_blank');
-                                            }}>Wpp</button>
+                                            }} style={{ marginLeft: 8 }}>Wpp</button>
                                         )}
                                     </td>
                                 </tr>
