@@ -326,7 +326,7 @@ const PlansPromosTab = () => {
 
     // Plan Modal
     const [showPlanModal, setShowPlanModal] = useState(false);
-    const [planForm, setPlanForm] = useState({ id: null, title: '', price: 0, period: 'por sessão', features: '', is_popular: false, active: true });
+    const [planForm, setPlanForm] = useState({ id: null, title: '', price: 0, period: 'por sessão', features: '', is_popular: false, active: true, whatsapp_message: '' });
 
     // Promo Modal
     const [showPromoModal, setShowPromoModal] = useState(false);
@@ -348,9 +348,9 @@ const PlansPromosTab = () => {
 
     const openPlan = (plan = null) => {
         if (plan) {
-            setPlanForm({ ...plan, features: (plan.features || []).join('\n') });
+            setPlanForm({ ...plan, features: (plan.features || []).join('\n'), whatsapp_message: plan.whatsapp_message || '' });
         } else {
-            setPlanForm({ id: null, title: '', price: 0, period: 'por sessão', features: '', is_popular: false, active: true });
+            setPlanForm({ id: null, title: '', price: 0, period: 'por sessão', features: '', is_popular: false, active: true, whatsapp_message: '' });
         }
         setShowPlanModal(true);
     };
@@ -364,7 +364,8 @@ const PlansPromosTab = () => {
             period: planForm.period,
             features: typeof planForm.features === 'string' ? planForm.features.split('\n').map(s => s.trim()).filter(Boolean) : planForm.features,
             is_popular: planForm.is_popular,
-            active: planForm.active
+            active: planForm.active,
+            whatsapp_message: planForm.whatsapp_message
         };
 
         if (planForm.id) {
@@ -480,6 +481,9 @@ const PlansPromosTab = () => {
                                     <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--color-text-light)', marginBottom: '16px' }}>
                                         {(plan.features || []).map((feat, idx) => <li key={idx} style={{ marginBottom: '4px' }}>{feat}</li>)}
                                     </ul>
+                                    <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '10px', borderTop: '1px solid #333', paddingTop: '8px' }}>
+                                        <strong>Mensagem Zap:</strong> {plan.whatsapp_message || 'Padrão'}
+                                    </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                     <button className="action-btn edit" onClick={() => openPlan(plan)}><Pencil size={16} /></button>
@@ -512,6 +516,11 @@ const PlansPromosTab = () => {
                         <div className="form-group">
                             <label>Itens Inclusos (um por linha)</label>
                             <textarea className="form-input" rows={4} value={planForm.features} onChange={e => setPlanForm({ ...planForm, features: e.target.value })}></textarea>
+                        </div>
+                        <div className="form-group">
+                            <label>Mensagem WhatsApp (Pré-definida para o cliente)</label>
+                            <textarea className="form-input" rows={2} placeholder="Ex: Olá! Tenho interesse no plano XYZ..." value={planForm.whatsapp_message} onChange={e => setPlanForm({ ...planForm, whatsapp_message: e.target.value })}></textarea>
+                            <small style={{ color: '#888' }}>Esta mensagem aparecerá no zap do cliente ao clicar no botão.</small>
                         </div>
                         <div className="form-group flex-row-center" style={{ display: 'flex', gap: '20px', marginTop: '10px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -875,6 +884,17 @@ const SubscriptionsTab = () => {
 
     useEffect(() => {
         fetchSubscriptions();
+
+        // Real-time listener to refresh list automatically
+        const channel = supabase.channel('public:plan_subscriptions')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_subscriptions' }, () => {
+                fetchSubscriptions();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const handleEdit = (sub) => {

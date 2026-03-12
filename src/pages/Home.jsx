@@ -9,11 +9,6 @@ const Home = () => {
     const navigate = useNavigate();
     const { siteData } = useContext(SiteContext);
 
-    // Modal State
-    const [selectedPlan, setSelectedPlan] = useState(null);
-    const [form, setForm] = useState({ name: '', phone: '' });
-    const [loadingPlan, setLoadingPlan] = useState(false);
-
     // Extract active plans and promotions from context
     const activePlans = (siteData?.plans || []).filter(p => p.active);
     const activePromotions = (siteData?.promotions || []).filter(p => p.active);
@@ -37,59 +32,6 @@ const Home = () => {
         backgroundPosition: 'center'
     } : {};
 
-    const handlePlanSubmit = async (e) => {
-        e.preventDefault();
-        if (!form.name || !form.phone) return alert('Por favor, preencha todos os campos.');
-        setLoadingPlan(true);
-
-        try {
-            // 1. Check if customer exists by phone
-            let customerId = null;
-            const cleanPhone = form.phone.replace(/\D/g, '');
-            const { data: existingCustomers } = await supabase
-                .from('customers')
-                .select('id')
-                .eq('phone', cleanPhone)
-                .limit(1);
-
-            if (existingCustomers && existingCustomers.length > 0) {
-                customerId = existingCustomers[0].id;
-                // Update name if changed
-                await supabase.from('customers').update({ name: form.name }).eq('id', customerId);
-            } else {
-                // Create new customer
-                const { data: newCustomer, error: insertError } = await supabase
-                    .from('customers')
-                    .insert([{ name: form.name, phone: cleanPhone }])
-                    .select('id')
-                    .single();
-
-                if (insertError) throw insertError;
-                customerId = newCustomer.id;
-            }
-
-            // 2. Register Plan Subscription Intention
-            await supabase.from('plan_subscriptions').insert([{
-                customer_id: customerId,
-                plan_id: selectedPlan.id,
-                status: 'pending' // Admin must activate
-            }]);
-
-            // 3. Redirect to WhatsApp
-            const msg = encodeURIComponent(`Olá! Me chamo ${form.name} e tenho interesse no plano "${selectedPlan.title}" do sistema de gestão.`);
-            window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=${msg}`, '_blank');
-
-            // Close modal
-            setSelectedPlan(null);
-            setForm({ name: '', phone: '' });
-
-        } catch (error) {
-            console.error('Error submitting plan:', error);
-            alert('Não foi possível registrar o interesse no momento. Tente novamente.');
-        } finally {
-            setLoadingPlan(false);
-        }
-    };
 
     return (
         <div className="home-app">
@@ -180,7 +122,26 @@ const Home = () => {
                                     ))}
                                 </ul>
                                 <div className="plan-action">
-                                    <button className={plan.is_popular ? "btn-app-small-solid" : "btn-app-small"} style={{ width: '100%' }} onClick={() => setSelectedPlan(plan)}>
+                                    <button
+                                        className={plan.is_popular ? "btn-app-small-solid" : "btn-app-small"}
+                                        style={{ width: '100%' }}
+                                        onClick={() => {
+                                            const phone = (siteData?.contact?.whatsapp || '5511939407229').replace(/\D/g, '');
+                                            const customMsg = plan.whatsapp_message || `Olá! Tenho interesse no plano ${plan.title}. Como posso assinar?`;
+                                            const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(customMsg)}`;
+
+                                            // 1. Open WhatsApp FIRST (must be synchronous to avoid popup blocker)
+                                            window.open(url, '_blank');
+
+                                            // 2. Log lead in background for Admin notification
+                                            supabase.from('plan_subscriptions').insert([{
+                                                customer_id: 'cffc45e1-2941-45f1-a5f2-e3971f6c7837',
+                                                plan_id: plan.id,
+                                                status: 'pending',
+                                                notes: 'Interesse via botão Home'
+                                            }]).catch(err => console.error("Erro no log:", err));
+                                        }}
+                                    >
                                         ASSINAR PLANO
                                     </button>
                                 </div>
@@ -236,53 +197,6 @@ const Home = () => {
 
             </div>
 
-            {/* PLAN SUBSCRIPTION MODAL */}
-            {selectedPlan && (
-                <div className="modal-overlay" onClick={() => !loadingPlan && setSelectedPlan(null)}>
-                    <div className="modal-content glass-panel" onClick={e => e.stopPropagation()} style={{ background: '#111', color: '#fff', border: '1px solid var(--color-primary)' }}>
-                        <div className="modal-header">
-                            <h3>Contratar {selectedPlan.title}</h3>
-                            <button className="modal-close" onClick={() => !loadingPlan && setSelectedPlan(null)}><X size={20} color="#fff" /></button>
-                        </div>
-                        <p style={{ color: '#aaa', fontSize: '14px', marginBottom: '20px' }}>
-                            Para iniciarmos o processo, precisamos de alguns dados antes de direcionar você para o WhatsApp de atendimento.
-                        </p>
-                        <form onSubmit={handlePlanSubmit} className="modal-form">
-                            <div className="form-group">
-                                <label>Nome Completo*</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={form.name}
-                                    onChange={e => setForm({ ...form, name: e.target.value })}
-                                    required
-                                    disabled={loadingPlan}
-                                    style={{ background: '#222', color: '#fff', border: '1px solid #333' }}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label>WhatsApp c/ DDD*</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={form.phone}
-                                    onChange={e => setForm({ ...form, phone: e.target.value })}
-                                    required
-                                    disabled={loadingPlan}
-                                    placeholder="Ex: 11999999999"
-                                    style={{ background: '#222', color: '#fff', border: '1px solid #333' }}
-                                />
-                            </div>
-                            <div className="modal-actions" style={{ marginTop: '24px' }}>
-                                <button type="button" className="btn-app-secondary" onClick={() => setSelectedPlan(null)} disabled={loadingPlan}>Cancelar</button>
-                                <button type="submit" className="btn-app-primary" disabled={loadingPlan}>
-                                    {loadingPlan ? 'Processando...' : 'Continuar para WhatsApp'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
