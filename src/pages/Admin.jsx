@@ -2769,21 +2769,30 @@ const PromotionInterestsTab = () => {
                                 <td>{item.promotions?.title || '---'}</td>
                                 <td><StatusBadge status={item.status} /></td>
                                 <td style={{ textAlign: 'right' }}>
-                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                        <button className="action-btn confirmed" title="WhatsApp" onClick={() => handleWhatsApp(item)}>
+                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                        <button className="admin-action-btn" title="Contactar via WhatsApp" onClick={() => handleWhatsApp(item)} style={{ background: '#25d36622', color: '#25d366' }}>
                                             <Bell size={16} />
                                         </button>
                                         <select
                                             value={item.status}
                                             onChange={(e) => updateStatus(item.id, e.target.value)}
-                                            style={{ background: '#222', color: '#eee', border: '1px solid #444', borderRadius: '4px', fontSize: '0.75rem', padding: '2px 4px' }}
+                                            className="admin-status-select"
+                                            style={{
+                                                background: 'var(--color-surface)',
+                                                color: 'var(--color-text)',
+                                                border: '1px solid var(--color-border)',
+                                                borderRadius: '6px',
+                                                fontSize: '0.75rem',
+                                                padding: '4px 8px',
+                                                cursor: 'pointer'
+                                            }}
                                         >
                                             <option value="pending">Pendente</option>
                                             <option value="contacted">Contatado</option>
                                             <option value="completed">Concluído</option>
                                             <option value="cancelled">Cancelado</option>
                                         </select>
-                                        <button className="action-btn delete" onClick={() => removeInterest(item.id)}><Trash2 size={16} /></button>
+                                        <button className="admin-action-btn delete" onClick={() => removeInterest(item.id)} title="Excluir"><Trash2 size={16} /></button>
                                     </div>
                                 </td>
                             </tr>

@@ -94,7 +94,7 @@ const Home = () => {
                                     <div style={{ position: 'absolute', top: '12px', right: '12px', background: 'var(--color-primary)', color: '#000', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800 }}>PROMOÇÃO</div>
                                     <h3 style={{ fontFamily: 'Montserrat, sans-serif', fontSize: '1.4rem', color: 'var(--color-text)', marginBottom: '8px', textTransform: 'uppercase' }}>{promo.title}</h3>
                                     <p style={{ color: 'var(--color-text-muted)', fontSize: '1rem', whiteSpace: 'pre-line', marginBottom: '20px', lineHeight: '1.5' }}>{promo.description}</p>
-                                    <button className="btn-app-primary" style={{ width: '100%', position: 'relative', zIndex: 10 }} onClick={(e) => {
+                                    <button className="btn-app-primary" style={{ width: '100%', position: 'relative', cursor: 'pointer', zIndex: 100 }} onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
                                         setSelectedPlan(promo);
