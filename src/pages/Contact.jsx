@@ -16,7 +16,7 @@ const Contact = () => {
                     <MapPin className="text-primary" />
                     <div>
                         <p className="contact-label">📍 LOCALIZAÇÃO</p>
-                        <p>{siteData.contact.address || 'Av. Central, 520 – Centro'}</p>
+                        <p>{siteData.contact.address || 'Rua. Centro, 159 - Centro'}</p>
                     </div>
                 </div>
                 <div className="info-item">
@@ -57,7 +57,7 @@ const Contact = () => {
                     allowFullScreen=""
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
-                    title="Localização StudioFlow"
+                    title="Localização Barbearia"
                 ></iframe>
             </div>
         </div>

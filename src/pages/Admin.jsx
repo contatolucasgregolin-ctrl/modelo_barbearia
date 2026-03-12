@@ -1658,7 +1658,7 @@ const SettingsTab = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
                     <SettingsField label="Título no Menu Superior" field="menuTitle" placeholder="Ex: BARBEARIA CLÁSSICA" form={form} setForm={setForm} />
                     <SettingsField label="Título Principal (Banner)" field="heroTitle" placeholder="Ex: BARBEARIA CLÁSSICA" form={form} setForm={setForm} />
-                    <SettingsField label="Subtítulo / Slogan" field="heroSubtitle" placeholder="Ex: Arte na pele. Histórias eternizadas." form={form} setForm={setForm} />
+                    <SettingsField label="Subtítulo / Slogan" field="heroSubtitle" placeholder="Ex: Estilo Clássico. Atendimento Premium." form={form} setForm={setForm} />
                 </div>
             </div>
 

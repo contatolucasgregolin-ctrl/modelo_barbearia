@@ -93,13 +93,12 @@ export const SiteProvider = ({ children }) => {
                     banner: branding.bannerUrl || '',
                     menuTitle: branding.menuTitle || 'BARBEARIA CLÁSSICA',
                     heroTitle: branding.heroTitle || 'BARBEARIA CLÁSSICA',
-                    heroSubtitle: branding.heroSubtitle || 'Arte na pele. Histórias eternizadas.',
+                    heroSubtitle: branding.heroSubtitle || 'Estilo Clássico. Atendimento Premium.',
                     contact: {
-
-                        phone: contact.phone || '(11) 9999-9999',
-                        whatsapp: contact.whatsapp || '5511999999999',
+                        phone: contact.phone || '(11)93940-7229',
+                        whatsapp: contact.whatsapp || '5511939407229',
                         instagram: contact.instagram || 'https://instagram.com/barbeariaclassica',
-                        address: contact.address || 'Av. Central, 520 – Centro'
+                        address: contact.address || 'Rua. Centro, 159 - Centro'
                     },
                     operatingHours: hours.weekdays ? hours : {
                         weekdays: { label: 'Segunda a Sábado', hours: '14:00 - 22:00' },

@@ -148,7 +148,7 @@ const Home = () => {
                     <div className="app-info-card">
                         <MapPin size={20} color="#888" />
                         <div className="app-info-label">Localização</div>
-                        <div className="app-info-value">{siteData?.contact?.address || 'Av. Central, 520'}</div>
+                        <div className="app-info-value">{siteData?.contact?.address || 'Rua. Centro, 159 - Centro'}</div>
                     </div>
                     <div className="app-info-card">
                         <Star size={20} color="#888" />
