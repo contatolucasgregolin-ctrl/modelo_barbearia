@@ -89,8 +89,12 @@ export const SiteProvider = ({ children }) => {
                 ]);
 
                 setSiteData({
-                    logo: branding.logoUrl || '',
-                    banner: branding.bannerUrl || '',
+                    logo: theme === 'light' ? (branding.logoUrlLight || branding.logoUrl || '') : (branding.logoUrlDark || branding.logoUrl || ''),
+                    logoLight: branding.logoUrlLight || branding.logoUrl || '',
+                    logoDark: branding.logoUrlDark || branding.logoUrl || '',
+                    banner: theme === 'light' ? (branding.bannerUrlLight || branding.bannerUrl || '') : (branding.bannerUrlDark || branding.bannerUrl || ''),
+                    bannerLight: branding.bannerUrlLight || branding.bannerUrl || '',
+                    bannerDark: branding.bannerUrlDark || branding.bannerUrl || '',
                     menuTitle: branding.menuTitle || 'BARBEARIA CLÁSSICA',
                     heroTitle: branding.heroTitle || 'BARBEARIA CLÁSSICA',
                     heroSubtitle: branding.heroSubtitle || 'Estilo Clássico. Atendimento Premium.',

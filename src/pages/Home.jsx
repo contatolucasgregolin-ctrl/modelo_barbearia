@@ -68,14 +68,21 @@ const Home = () => {
                 {activePromotions.length > 0 && (
                     <div className="app-promotions-container fade-in" style={{ marginTop: '20px' }}>
                         {activePromotions.map(promo => (
-                            <div key={promo.id} className="app-promo-card neon-glow" style={{ position: 'relative', borderRadius: '16px', overflow: 'hidden', marginBottom: '24px', background: 'rgba(20, 20, 20, 0.95)', border: '1px solid var(--color-primary)' }}>
+                            <div key={promo.id} className="app-promo-card neon-glow" style={{
+                                position: 'relative',
+                                borderRadius: '16px',
+                                overflow: 'hidden',
+                                marginBottom: '24px',
+                                background: 'var(--color-surface, #141414)',
+                                border: '1px solid var(--color-primary)'
+                            }}>
                                 {promo.image_url && (
                                     <img src={promo.image_url} alt={promo.title} style={{ width: '100%', height: '200px', objectFit: 'cover', display: 'block' }} />
                                 )}
                                 <div style={{ padding: '24px', textAlign: 'center' }}>
                                     <div style={{ position: 'absolute', top: '12px', right: '12px', background: 'var(--color-primary)', color: '#000', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800 }}>PROMOÇÃO</div>
-                                    <h3 style={{ fontFamily: 'Montserrat, sans-serif', fontSize: '1.4rem', color: '#fff', marginBottom: '8px', textTransform: 'uppercase' }}>{promo.title}</h3>
-                                    <p style={{ color: '#ccc', fontSize: '1rem', whiteSpace: 'pre-line', marginBottom: '20px', lineHeight: '1.5' }}>{promo.description}</p>
+                                    <h3 style={{ fontFamily: 'Montserrat, sans-serif', fontSize: '1.4rem', color: 'var(--color-text)', marginBottom: '8px', textTransform: 'uppercase' }}>{promo.title}</h3>
+                                    <p style={{ color: 'var(--color-text-muted)', fontSize: '1rem', whiteSpace: 'pre-line', marginBottom: '20px', lineHeight: '1.5' }}>{promo.description}</p>
                                     <button className="btn-app-primary" style={{ width: '100%' }} onClick={() => {
                                         const msg = encodeURIComponent(`Olá! Gostaria de aproveitar a oferta "${promo.title}". Poderia me dar mais informações?`);
                                         window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=${msg}`, '_blank');
