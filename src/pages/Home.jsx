@@ -36,15 +36,6 @@ const Home = () => {
     // Filter normal services
     const availableServices = siteData?.services || [];
 
-    // Barbershop service list
-    const hardcodedServices = [
-        { id: 'corte', name: 'CORTE CLÁSSICO', desc: 'Tesoura, navalha e acabamento perfeito', priceText: 'R$ 60' },
-        { id: 'degradê', name: 'DEGRADÊ E DRY', desc: 'Degrade moderno com secagem e styling', priceText: 'R$ 70' },
-        { id: 'barba', name: 'BARBA COMPLETA', desc: 'Alinhamento + toalha quente + massagem', priceText: 'R$ 50' },
-        { id: 'combo', name: 'CORTE & BARBA', desc: 'O combo completo para o seu visual', priceText: 'R$ 100' },
-        { id: 'sobrancelha', name: 'DESIGN DE SOBRANCELHA', desc: 'Alinhamento e definição das sobrancelhas', priceText: 'R$ 30' },
-        { id: 'tratamento', name: 'TRATAMENTO CAPILAR', desc: 'Hidratação profunda e limpeza do couro', priceText: 'R$ 80' },
-    ];
 
     const heroStyle = siteData?.banner ? {
         backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 10, 0.5) 0%, rgba(10, 10, 10, 1) 100%), url(${siteData.banner})`,
@@ -188,26 +179,29 @@ const Home = () => {
                     </ul>
                 </div>
 
-                {/* 6️⃣ SERVICES LIST (Estilos de Tatuagem) */}
+                {/* 6️⃣ SERVICES LIST */}
                 <div className="app-section-header" style={{ textAlign: 'left', marginTop: '24px' }}>
                     <h2 className="app-title-font app-section-title">✂️ NOSSOS SERVIÇOS</h2>
                 </div>
 
                 <div className="app-service-list">
-                    {hardcodedServices.map(service => (
+                    {availableServices.map(service => (
                         <div key={service.id} className="app-service-item">
                             <div className="service-item-content">
                                 <div className="service-item-title">{service.name}</div>
                                 <div className="service-item-desc">{service.desc}</div>
                             </div>
                             <div className="service-item-action">
-                                <div className="service-item-price">{service.priceText}</div>
+                                <div className="service-item-price">R$ {service.price}</div>
                                 <button className="btn-app-small" onClick={() => navigate('/agendamento')}>
                                     AGENDAR
                                 </button>
                             </div>
                         </div>
                     ))}
+                    {availableServices.length === 0 && (
+                        <p style={{ textAlign: 'center', color: '#888', gridColumn: 'span 2' }}>Carregando serviços...</p>
+                    )}
                 </div>
 
                 {/* 7️⃣ GALLERY PREVIEW (Estilos de Corte) */}

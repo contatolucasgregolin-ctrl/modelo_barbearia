@@ -219,7 +219,7 @@ const Schedule = () => {
                                     )}
                                     <div className="info">
                                         <h4 style={isCombo ? { color: 'var(--color-primary)' } : {}}>{service.name}</h4>
-                                        <span className="duration">{service.duration}</span>
+                                        <span className="duration">{service.duration_mins} min</span>
                                     </div>
                                     <span className="price">R$ {service.price}</span>
                                 </div>
