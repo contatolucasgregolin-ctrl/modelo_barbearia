@@ -913,6 +913,7 @@ const AppointmentsTab = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 const SubscriptionsTab = () => {
     const [subscriptions, setSubscriptions] = useState([]);
+    const [artists, setArtists] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -938,6 +939,11 @@ const SubscriptionsTab = () => {
 
     useEffect(() => {
         fetchSubscriptions();
+
+        // Load artists for the preferred barber select
+        supabase.from('artists').select('id, name').then(({ data }) => {
+            if (data) setArtists(data);
+        });
 
         // Real-time listener to refresh list automatically (unique channel name to avoid conflict)
         const channel = supabase.channel('subscriptions-tab-refresh')
@@ -1187,6 +1193,19 @@ const SubscriptionsTab = () => {
                                 <option value="active">Ativo (Em andamento)</option>
                                 <option value="completed">Concluído</option>
                                 <option value="cancelled">Cancelado</option>
+                            </select>
+                        </div>
+                        <div className="admin-form-group">
+                            <label>Profissional Preferido</label>
+                            <select
+                                className="app-form-control"
+                                value={selectedSub.preferred_barber || ''}
+                                onChange={e => setSelectedSub({ ...selectedSub, preferred_barber: e.target.value })}
+                            >
+                                <option value="">Qualquer um</option>
+                                {artists?.map(artist => (
+                                    <option key={artist.id} value={artist.name}>{artist.name}</option>
+                                ))}
                             </select>
                         </div>
                         <div className="admin-form-group">
