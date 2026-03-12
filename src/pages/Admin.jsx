@@ -536,7 +536,7 @@ const PlansPromosTab = () => {
                     <div className="admin-form">
                         <div className="form-group">
                             <label>Título da Promoção *</label>
-                            <input type="text" className="form-input" placeholder="Ex: Flash Tattoo Day" value={promoForm.title} onChange={e => setPromoForm({ ...promoForm, title: e.target.value })} />
+                            <input type="text" className="form-input" placeholder="Ex: Dia do Noivo" value={promoForm.title} onChange={e => setPromoForm({ ...promoForm, title: e.target.value })} />
                         </div>
                         <div className="form-group">
                             <label>Descrição *</label>
@@ -1625,7 +1625,7 @@ const SettingsTab = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' }}>
                     {/* Logo Upload */}
                     <div className="form-group">
-                        <label>Logo do Estúdio</label>
+                        <label>Logo da Barbearia</label>
                         {form.logoUrl ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 <div style={{ background: '#111', padding: '10px', borderRadius: '8px', display: 'flex', justifyContent: 'center' }}>
@@ -1656,8 +1656,8 @@ const SettingsTab = () => {
 
                 <h4 style={{ fontSize: '0.9rem', color: '#888', marginBottom: '10px' }}>Textos Base</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
-                    <SettingsField label="Título no Menu Superior" field="menuTitle" placeholder="Ex: INK HAVEN TATTOO" form={form} setForm={setForm} />
-                    <SettingsField label="Título Principal (Banner)" field="heroTitle" placeholder="Ex: INK HAVEN TATTOO" form={form} setForm={setForm} />
+                    <SettingsField label="Título no Menu Superior" field="menuTitle" placeholder="Ex: BARBEARIA CLÁSSICA" form={form} setForm={setForm} />
+                    <SettingsField label="Título Principal (Banner)" field="heroTitle" placeholder="Ex: BARBEARIA CLÁSSICA" form={form} setForm={setForm} />
                     <SettingsField label="Subtítulo / Slogan" field="heroSubtitle" placeholder="Ex: Arte na pele. Histórias eternizadas." form={form} setForm={setForm} />
                 </div>
             </div>
@@ -1674,7 +1674,7 @@ const SettingsTab = () => {
 
             <div className="glass-panel" style={{ padding: '20px', borderRadius: 12, marginBottom: 20 }}>
                 <h3 style={{ marginBottom: 16, fontSize: '1.1rem', color: 'var(--color-primary)' }}>🕐 Horários de Funcionamento</h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 15 }}>Deixe "Abre" e "Fecha" em branco para dias em que o estúdio estiver fechado.</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 15 }}>Deixe "Abre" e "Fecha" em branco para dias em que a barbearia estiver fechada.</p>
                 <SettingsTimeField labelPrefix="Dias úteis" prefixKey="weekdays" form={form} setForm={setForm} />
                 <SettingsTimeField labelPrefix="Finais de semana 1" prefixKey="saturdays" form={form} setForm={setForm} />
                 <SettingsTimeField labelPrefix="Finais de semana 2" prefixKey="sundays" form={form} setForm={setForm} />
@@ -2111,7 +2111,7 @@ const GalleryTab = () => {
     return (
         <div className="fade-in">
             <div className="admin-section-header">
-                <h2 className="admin-section-title">Galeria de Tattoos</h2>
+                <h2 className="admin-section-title">Galeria de Cortes</h2>
                 <button className="admin-add-btn neon-glow" onClick={openNew}><Plus size={16} /> <span>Nova Foto</span></button>
             </div>
 

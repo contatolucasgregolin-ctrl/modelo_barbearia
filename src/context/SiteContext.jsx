@@ -91,14 +91,14 @@ export const SiteProvider = ({ children }) => {
                 setSiteData({
                     logo: branding.logoUrl || '',
                     banner: branding.bannerUrl || '',
-                    menuTitle: branding.menuTitle || 'INK HAVEN TATTOO',
-                    heroTitle: branding.heroTitle || 'INK HAVEN TATTOO',
+                    menuTitle: branding.menuTitle || 'BARBEARIA CLÁSSICA',
+                    heroTitle: branding.heroTitle || 'BARBEARIA CLÁSSICA',
                     heroSubtitle: branding.heroSubtitle || 'Arte na pele. Histórias eternizadas.',
                     contact: {
 
                         phone: contact.phone || '(11) 9999-9999',
                         whatsapp: contact.whatsapp || '5511999999999',
-                        instagram: contact.instagram || 'https://instagram.com/inkhaventattoo',
+                        instagram: contact.instagram || 'https://instagram.com/barbeariaclassica',
                         address: contact.address || 'Av. Central, 520 – Centro'
                     },
                     operatingHours: hours.weekdays ? hours : {

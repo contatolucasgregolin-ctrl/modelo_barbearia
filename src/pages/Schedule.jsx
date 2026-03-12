@@ -93,7 +93,7 @@ const Schedule = () => {
     const finishScheduling = () => {
         // Build WhatsApp URL FIRST — must be synchronous to avoid popup blocker
         const phoneNumber = siteData.contact.whatsapp;
-        let message = `*Novo Agendamento Ink Haven Tattoo* 🖤\n`;
+        let message = `*Novo Agendamento Barbearia* ✂️\n`;
         message += `---------------------------\n`;
         message += `*Cliente:* ${clientName}\n`;
         message += `*Contato:* ${clientPhone}\n`;
@@ -305,7 +305,7 @@ const Schedule = () => {
                                 fontSize: '0.85rem',
                                 color: '#ff6b6b'
                             }}>
-                                🚫 <strong>Domingo</strong> — O estúdio está <strong>fechado</strong> aos domingos. Escolha outro dia.
+                                🚫 <strong>Domingo</strong> — A barbearia está <strong>fechada</strong> aos domingos. Escolha outro dia.
                             </div>
                         )}
 

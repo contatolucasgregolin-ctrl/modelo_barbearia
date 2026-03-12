@@ -21,22 +21,25 @@ const Home = () => {
     // Filter normal services
     const availableServices = siteData?.services || [];
 
-    // Tatuagem service list
+    // Barbershop service list
     const hardcodedServices = [
-        { id: 'fline', name: 'FINE LINE', desc: 'Traços finos e minimalistas', priceText: 'a partir de R$ 180' },
-        { id: 'oschool', name: 'OLD SCHOOL', desc: 'Estilo tradicional americano', priceText: 'a partir de R$ 250' },
-        { id: 'real', name: 'REALISMO', desc: 'Tatuagens detalhadas e realistas', priceText: 'a partir de R$ 400' },
-        { id: 'bwork', name: 'BLACKWORK', desc: 'Arte em preto sólido', priceText: 'a partir de R$ 300' },
-        { id: 'fbra', name: 'FECHAMENTO DE BRAÇO', desc: 'Projeto completo', priceText: 'a partir de R$ 2500' },
-        { id: 'cover', name: 'COBERTURA (COVER UP)', desc: 'Cobertura de tatuagens antigas', priceText: 'a partir de R$ 350' },
-        { id: 'perso', name: 'TATUAGEM PERSONALIZADA', desc: 'Projeto exclusivo criado pelo artista', priceText: 'valor sob consulta' },
+        { id: 'corte', name: 'CORTE CLÁSSICO', desc: 'Tesoura, navalha e acabamento perfeito', priceText: 'R$ 60' },
+        { id: 'degradê', name: 'DEGRADÊ E DRY', desc: 'Degrade moderno com secagem e styling', priceText: 'R$ 70' },
+        { id: 'barba', name: 'BARBA COMPLETA', desc: 'Alinhamento + toalha quente + massagem', priceText: 'R$ 50' },
+        { id: 'combo', name: 'CORTE & BARBA', desc: 'O combo completo para o seu visual', priceText: 'R$ 100' },
+        { id: 'sobrancelha', name: 'DESIGN DE SOBRANCELHA', desc: 'Alinhamento e definição das sobrancelhas', priceText: 'R$ 30' },
+        { id: 'tratamento', name: 'TRATAMENTO CAPILAR', desc: 'Hidratação profunda e limpeza do couro', priceText: 'R$ 80' },
     ];
 
     const heroStyle = siteData?.banner ? {
         backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 10, 0.5) 0%, rgba(10, 10, 10, 1) 100%), url(${siteData.banner})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center'
-    } : {};
+    } : {
+        backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 10, 0.5) 0%, rgba(10, 10, 10, 1) 100%), url('/barbershop_hero.jpg')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+    };
 
     const handlePlanSubmit = async (e) => {
         e.preventDefault();
@@ -97,8 +100,8 @@ const Home = () => {
 
             {/* 1️⃣ HERO (Topo) */}
             <section className="app-hero" style={heroStyle}>
-                <h1 className="app-title-font app-hero-title">{siteData?.heroTitle || 'INK HAVEN TATTOO'}</h1>
-                <p className="app-hero-subtitle">{siteData?.heroSubtitle || 'Arte na pele. Histórias eternizadas.'}</p>
+                <h1 className="app-title-font app-hero-title">{siteData?.heroTitle || 'BARBEARIA CLÁSSICA'}</h1>
+                <p className="app-hero-subtitle">{siteData?.heroSubtitle || 'Estilo Clássico. Atendimento Premium.'}</p>
                 {siteData?.contact?.instagram && (
                     <a href={siteData.contact.instagram.startsWith('http') ? siteData.contact.instagram : `https://instagram.com/${siteData.contact.instagram.replace('@', '')}`} target="_blank" rel="noreferrer" className="app-hero-insta">
                         @{siteData.contact.instagram.split('/').pop().replace('@', '')}
@@ -160,8 +163,9 @@ const Home = () => {
 
                 {/* 4️⃣ SESSION PLANS */}
                 <div className="app-section-header">
-                    <h2 className="app-title-font app-section-title">💈 PLANOS DE SESSÃO</h2>
-                    <p className="app-section-subtitle">Sessões planejadas para quem está fazendo tatuagens maiores.</p>
+                    <h2 className="app-title-font app-section-title">💈 PLANOS DE MENSALISTA</h2>
+                    <p className="app-section-subtitle">Cortes e barbas ilimitados com condições especiais para clientes do plano.</p>
+
                 </div>
 
                 {activePlans.length > 0 ? (
@@ -199,22 +203,22 @@ const Home = () => {
                         <Info size={16} /> INFORMAÇÕES ÚTEIS
                     </div>
                     <p className="info-box-desc">
-                        A solução ideal para quem quer fazer tatuagens com planejamento e tranquilidade.
+                        A solução ideal para quem quer cortes de qualidade com economia e praticidade.
                     </p>
                     <div className="info-box-title" style={{ fontSize: '0.8rem', color: '#888', marginTop: '16px', marginBottom: '8px' }}>
                         ★ VANTAGENS
                     </div>
                     <ul className="plan-features">
-                        <li style={{ color: '#888' }}>organização de sessões</li>
-                        <li style={{ color: '#888' }}>planejamento artístico</li>
-                        <li style={{ color: '#888' }}>garantia de horário reservado</li>
-                        <li style={{ color: '#888' }}>acompanhamento do projeto</li>
+                        <li style={{ color: '#888' }}>cortes e barba a qualquer hora</li>
+                        <li style={{ color: '#888' }}>prioridade no agendamento</li>
+                        <li style={{ color: '#888' }}>horário reservado garantido</li>
+                        <li style={{ color: '#888' }}>desconto exclusivo em produtos</li>
                     </ul>
                 </div>
 
                 {/* 6️⃣ SERVICES LIST (Estilos de Tatuagem) */}
                 <div className="app-section-header" style={{ textAlign: 'left', marginTop: '24px' }}>
-                    <h2 className="app-title-font app-section-title">ESTILOS DE TATUAGEM</h2>
+                    <h2 className="app-title-font app-section-title">✂️ NOSSOS SERVIÇOS</h2>
                 </div>
 
                 <div className="app-service-list">

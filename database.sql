@@ -32,10 +32,10 @@ create table services (
 
 -- Inserir dados de serviços genéricos
 insert into services (name, duration_mins, price, description, is_featured) values
-  ('Sessão de Tatuagem', 180, 250.00, 'Sessão padrão de tatuagem, arte exclusiva.', true),
-  ('Piercing', 30, 80.00, 'Perfuração com joia básica inclusa.', false),
-  ('Corte de Cabelo / Barba', 60, 60.00, 'Corte de cabelo padrão ou alinhamento de barba.', false),
-  ('Estética Facial', 90, 150.00, 'Limpeza de pele e tratamentos faciais rápidos.', false);
+  ('Corte de Cabelo Clássico', 45, 60.00, 'Design de corte com tesoura e máquina, lavagem inclusa.', true),
+  ('Barba com Toalha Quente', 40, 50.00, 'Alinhamento completo, toalha quente e massagem facial.', true),
+  ('Corte & Barba (Combo)', 80, 100.00, 'O pacote completo para o seu visual com desconto especial.', true),
+  ('Tratamento Capilar', 30, 80.00, 'Limpeza profunda e hidratação do couro cabeludo.', false);
 
 -- Criar tabela de profissionais (artists)
 create table artists (
@@ -49,9 +49,9 @@ create table artists (
 
 -- Inserir profissionais fictícios
 insert into artists (name, instagram, specialty, active) values
-  ('Ana Souza', 'anasouza', 'Tatuagem Fineline e Aquarela', true),
-  ('Carlos Mendes', 'carlosmendes', 'Barbearia Clássica e Piercing', true),
-  ('Juliana Costa', 'julianacosta', 'Estética Avançada', true);
+  ('Léo Silva', 'leosilva.barber', 'Cortes Clássicos e Degradê', true),
+  ('Marcos "Navalha"', 'marcos.navalha', 'Barboterapia e Desenhos', true),
+  ('Rafael Costa', 'rafaelcosta_barber', 'Colorimetria e Freestyle', true);
 
 -- Criar tabela de agendamentos
 create table appointments (
@@ -94,8 +94,8 @@ create table plans (
 
 -- Inserir planos padrão
 insert into plans (title, price, period, features, is_popular) values
-  ('PLANO ART SESSION', 450.00, 'por sessão', '["até 4 horas de tatuagem", "planejamento artístico", "acompanhamento do projeto"]', false),
-  ('PLANO FULL DAY', 900.00, 'por sessão', '["até 8 horas de tatuagem", "projeto personalizado", "prioridade de agenda"]', true);
+  ('PLANO ASSINATURA VIP', 180.00, 'mensal', '["2 cortes mensais", "1 barba mensal", "Bebida cortesia"]', false),
+  ('PLANO OPEN BARBER', 300.00, 'mensal', '["Cortes ilimitados", "Barba livre", "Desconto em produtos"]', true);
 
 -- Criar tabela de promoções (promotions)
 create table promotions (

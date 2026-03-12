@@ -25,7 +25,7 @@ const staggerContainer = {
 const categories = [
     {
         icon: Sparkles,
-        name: 'Cuidados Pós-Tattoo',
+        name: 'Cuidados para Barba e Cabelo',
         desc: 'Pomadas cicatrizantes e hidratantes específicos para tatuagem.',
         products: ['Pomada Manteiga', 'Creme Cicatrizante', 'Hidratante Diário'],
         soon: true,
@@ -148,7 +148,7 @@ const Products = () => {
                 <p>Quer sugerir um produto?</p>
                 <button
                     className="btn btn-primary"
-                    onClick={() => window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=Olá! Gostaria de sugerir um produto para o estúdio.`, '_blank')}
+                    onClick={() => window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=Olá! Gostaria de sugerir um produto para a barbearia.`, '_blank')}
                 >
                     💬 Falar com a equipe
                 </button>

@@ -16,7 +16,7 @@ const Header = () => {
                         <img src={siteData.logo} alt="Studio Logo" style={{ maxHeight: '50px', objectFit: 'contain' }} />
                     ) : (
                         <h2 style={{ margin: 0, fontFamily: 'Montserrat, sans-serif', fontSize: '24px', fontWeight: 800, letterSpacing: '-1px', color: 'var(--color-primary)' }}>
-                            {siteData.menuTitle || 'INK HAVEN TATTOO'}
+                            {siteData.menuTitle || 'BARBEARIA CLÁSSICA'}
                         </h2>
                     )}
                 </div>
