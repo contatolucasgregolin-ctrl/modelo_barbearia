@@ -161,10 +161,16 @@ const Admin = () => {
     };
 
     // Navigate to respective tab and clear badge
-    const handleNotificationClick = () => {
-        const targetTab = notificationQueue[0]?.type === 'subscription' ? 'subscriptions' : 'appointments';
-        setNotificationQueue([]);
-        setUnreadCount(0);
+    const handleNotificationClick = (notif) => {
+        const targetTab = notif?.type === 'subscription' ? 'subscriptions' : 'appointments';
+        // Se clicar em uma notificação específica, remove só ela
+        if (notif) {
+            setNotificationQueue(prev => prev.filter(n => n !== notif));
+            setUnreadCount(prev => Math.max(0, prev - 1));
+        } else {
+            setNotificationQueue([]);
+            setUnreadCount(0);
+        }
         setShowBellPanel(false);
         handleTabChange(targetTab);
     };
@@ -180,37 +186,32 @@ const Admin = () => {
     };
 
     return (
-        <div className="admin-shell">
-            {/* ── Persistent Notification Popup — shows queue[0], persists until dismissed ── */}
-            {notificationQueue.length > 0 && (
-                <div className="admin-notification-overlay fade-in">
-                    <div className="admin-notification-popup glass-panel scale-in" onClick={e => e.stopPropagation()}>
-                        {notificationQueue.length > 1 && (
-                            <div style={{
-                                position: 'absolute', top: '12px', left: '12px',
-                                background: '#ef4444', color: '#fff', borderRadius: '20px',
-                                fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px'
-                            }}>
-                                {notificationQueue.length} novas notificações
-                            </div>
+        <div className="admin-shell" onClick={() => setShowBellPanel(false)}>
+            {/* ── Bell Dropdown Panel ── */}
+            {showBellPanel && (
+                <div className="admin-bell-panel glass-panel fade-in" onClick={e => e.stopPropagation()}>
+                    <div className="bell-panel-header">
+                        <h4>Notificações Recentes</h4>
+                        {notificationQueue.length > 0 && (
+                            <button onClick={() => { setNotificationQueue([]); setUnreadCount(0); }} className="text-primary" style={{ fontSize: '0.75rem' }}>Limpar Todas</button>
                         )}
-                        <div className="notification-icon-large">
-                            <Bell size={40} />
-                        </div>
-                        <h3 className="notification-title">{notificationQueue[0].title}</h3>
-                        <p className="notification-message">{notificationQueue[0].message}</p>
-
-                        <div className="notification-actions">
-                            <button className="admin-btn-secondary" onClick={dismissNotification}>
-                                {notificationQueue.length > 1 ? `Ignorar (${notificationQueue.length - 1} restante${notificationQueue.length > 2 ? 's' : ''})` : 'Ignorar'}
-                            </button>
-                            <button className="admin-btn-primary neon-glow" onClick={handleNotificationClick}>
-                                Ver Detalhes
-                            </button>
-                        </div>
-                        <button className="notification-close-btn" onClick={dismissNotification}>
-                            <X size={20} />
-                        </button>
+                    </div>
+                    <div className="bell-panel-content">
+                        {notificationQueue.length === 0 ? (
+                            <div className="bell-empty">Nenhuma nova notificação</div>
+                        ) : (
+                            notificationQueue.map((notif, idx) => (
+                                <div key={idx} className="bell-item" onClick={() => handleNotificationClick(notif)}>
+                                    <div className="bell-item-icon">
+                                        <Bell size={16} />
+                                    </div>
+                                    <div className="bell-item-text">
+                                        <div className="bell-item-title">{notif.title}</div>
+                                        <div className="bell-item-msg">{notif.message}</div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             )}
@@ -251,10 +252,11 @@ const Admin = () => {
                         {/* Bell Button with Badge */}
                         <div style={{ position: 'relative', display: 'inline-flex' }}>
                             <button
-                                onClick={() => {
-                                    if (unreadCount > 0) handleNotificationClick();
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowBellPanel(!showBellPanel);
                                 }}
-                                className="theme-toggle-btn"
+                                className={`theme-toggle-btn ${showBellPanel ? 'active' : ''}`}
                                 title={unreadCount > 0 ? `${unreadCount} notificações não lidas` : 'Notificações'}
                                 style={{ marginRight: '4px', position: 'relative' }}
                             >
@@ -328,7 +330,7 @@ const PlansPromosTab = () => {
 
     // Plan Modal
     const [showPlanModal, setShowPlanModal] = useState(false);
-    const [planForm, setPlanForm] = useState({ id: null, title: '', price: 0, period: 'por sessão', features: '', is_popular: false, active: true, whatsapp_message: '' });
+    const [planForm, setPlanForm] = useState({ id: null, title: '', price: 0, period: 'por sessão', usage_limits: { cortes: 0, barbas: 0, bebidas: 0 }, is_popular: false, active: true, whatsapp_message: '' });
 
     // Promo Modal
     const [showPromoModal, setShowPromoModal] = useState(false);
@@ -350,9 +352,10 @@ const PlansPromosTab = () => {
 
     const openPlan = (plan = null) => {
         if (plan) {
-            setPlanForm({ ...plan, features: (plan.features || []).join('\n'), whatsapp_message: plan.whatsapp_message || '' });
+            const usage_limits = plan.usage_limits || { cortes: 0, barbas: 0, bebidas: 0 };
+            setPlanForm({ ...plan, usage_limits, whatsapp_message: plan.whatsapp_message || '' });
         } else {
-            setPlanForm({ id: null, title: '', price: 0, period: 'por sessão', features: '', is_popular: false, active: true, whatsapp_message: '' });
+            setPlanForm({ id: null, title: '', price: 0, period: 'por mês', usage_limits: { cortes: 0, barbas: 0, bebidas: 0 }, is_popular: false, active: true, whatsapp_message: '' });
         }
         setShowPlanModal(true);
     };
@@ -360,11 +363,18 @@ const PlansPromosTab = () => {
     const savePlan = async () => {
         if (!planForm.title) return alert('O título é obrigatório');
 
+        const limits = planForm.usage_limits;
+        const autoFeatures = [];
+        if (limits.cortes > 0) autoFeatures.push(`${limits.cortes} Corte${limits.cortes > 1 ? 's' : ''}`);
+        if (limits.barbas > 0) autoFeatures.push(`${limits.barbas} Barba${limits.barbas > 1 ? 's' : ''}`);
+        if (limits.bebidas > 0) autoFeatures.push(`${limits.bebidas} Bebida${limits.bebidas > 1 ? 's' : ''}`);
+
         const payload = {
             title: planForm.title,
             price: planForm.price,
             period: planForm.period,
-            features: typeof planForm.features === 'string' ? planForm.features.split('\n').map(s => s.trim()).filter(Boolean) : planForm.features,
+            usage_limits: planForm.usage_limits,
+            features: autoFeatures,
             is_popular: planForm.is_popular,
             active: planForm.active,
             whatsapp_message: planForm.whatsapp_message
@@ -503,41 +513,67 @@ const PlansPromosTab = () => {
                     <div className="admin-form">
                         <div className="form-group">
                             <label>Título do Plano *</label>
-                            <input type="text" className="form-input" value={planForm.title} onChange={e => setPlanForm({ ...planForm, title: e.target.value })} />
+                            <input type="text" className="app-form-control" value={planForm.title} onChange={e => setPlanForm({ ...planForm, title: e.target.value })} />
                         </div>
                         <div style={{ display: 'flex', gap: '10px' }}>
                             <div className="form-group" style={{ flex: 1 }}>
                                 <label>Preço (R$) *</label>
-                                <input type="number" className="form-input" value={planForm.price} onChange={e => setPlanForm({ ...planForm, price: e.target.value })} />
+                                <input type="number" className="app-form-control" value={planForm.price} onChange={e => setPlanForm({ ...planForm, price: e.target.value })} />
                             </div>
                             <div className="form-group" style={{ flex: 1 }}>
                                 <label>Período (Ex: por sessão)</label>
-                                <input type="text" className="form-input" value={planForm.period} onChange={e => setPlanForm({ ...planForm, period: e.target.value })} />
+                                <input type="text" className="app-form-control" value={planForm.period} onChange={e => setPlanForm({ ...planForm, period: e.target.value })} />
                             </div>
                         </div>
                         <div className="form-group">
-                            <label>Itens Inclusos (um por linha)</label>
-                            <textarea className="form-input" rows={4} value={planForm.features} onChange={e => setPlanForm({ ...planForm, features: e.target.value })}></textarea>
-                        </div>
-                        <div className="form-group">
-                            <label>Mensagem WhatsApp (Pré-definida para o cliente)</label>
-                            <textarea className="form-input" rows={2} placeholder="Ex: Olá! Tenho interesse no plano XYZ..." value={planForm.whatsapp_message} onChange={e => setPlanForm({ ...planForm, whatsapp_message: e.target.value })}></textarea>
-                            <small style={{ color: '#888' }}>Esta mensagem aparecerá no zap do cliente ao clicar no botão.</small>
-                        </div>
-                        <div className="form-group flex-row-center" style={{ display: 'flex', gap: '20px', marginTop: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="checkbox" id="planActive" checked={planForm.active} onChange={e => setPlanForm({ ...planForm, active: e.target.checked })} />
-                                <label htmlFor="planActive" style={{ margin: 0 }}>Ativo</label>
+                            <label>Limites do Plano (Mensalistas)</label>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginTop: '4px' }}>
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '8px' }}>✂️ Cortes</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '4px' }}>
+                                        <button type="button" className="usage-btn" onClick={() => setPlanForm({ ...planForm, usage_limits: { ...planForm.usage_limits, cortes: Math.max(0, planForm.usage_limits.cortes - 1) } })}>-</button>
+                                        <span style={{ fontWeight: 'bold' }}>{planForm.usage_limits.cortes}</span>
+                                        <button type="button" className="usage-btn" onClick={() => setPlanForm({ ...planForm, usage_limits: { ...planForm.usage_limits, cortes: planForm.usage_limits.cortes + 1 } })}>+</button>
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '8px' }}>🧔 Barbas</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '4px' }}>
+                                        <button type="button" className="usage-btn" onClick={() => setPlanForm({ ...planForm, usage_limits: { ...planForm.usage_limits, barbas: Math.max(0, planForm.usage_limits.barbas - 1) } })}>-</button>
+                                        <span style={{ fontWeight: 'bold' }}>{planForm.usage_limits.barbas}</span>
+                                        <button type="button" className="usage-btn" onClick={() => setPlanForm({ ...planForm, usage_limits: { ...planForm.usage_limits, barbas: planForm.usage_limits.barbas + 1 } })}>+</button>
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '8px' }}>🥃 Bebidas</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '4px' }}>
+                                        <button type="button" className="usage-btn" onClick={() => setPlanForm({ ...planForm, usage_limits: { ...planForm.usage_limits, bebidas: Math.max(0, planForm.usage_limits.bebidas - 1) } })}>-</button>
+                                        <span style={{ fontWeight: 'bold' }}>{planForm.usage_limits.bebidas}</span>
+                                        <button type="button" className="usage-btn" onClick={() => setPlanForm({ ...planForm, usage_limits: { ...planForm.usage_limits, bebidas: planForm.usage_limits.bebidas + 1 } })}>+</button>
+                                    </div>
+                                </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="checkbox" id="planPopular" checked={planForm.is_popular} onChange={e => setPlanForm({ ...planForm, is_popular: e.target.checked })} />
-                                <label htmlFor="planPopular" style={{ margin: 0 }}>Mais Popular (Destaque)</label>
-                            </div>
+                            <small style={{ color: '#888', marginTop: '8px', display: 'block' }}>Os "Itens Inclusos" exibidos no site serão gerados automaticamente com base nestes números.</small>
                         </div>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
-                            <button className="admin-btn-secondary" onClick={() => setShowPlanModal(false)}>Cancelar</button>
-                            <button className="admin-btn-primary neon-glow" onClick={savePlan}><Save size={16} /> Salvar</button>
+                    </div>
+                    <div className="form-group">
+                        <label>Mensagem WhatsApp (Pré-definida para o cliente)</label>
+                        <textarea className="app-form-control" rows={2} placeholder="Ex: Olá! Tenho interesse no plano XYZ..." value={planForm.whatsapp_message} onChange={e => setPlanForm({ ...planForm, whatsapp_message: e.target.value })}></textarea>
+                        <small style={{ color: '#888' }}>Esta mensagem aparecerá no zap do cliente ao clicar no botão.</small>
+                    </div>
+                    <div className="form-group flex-row-center" style={{ display: 'flex', gap: '20px', marginTop: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input type="checkbox" id="planActive" checked={planForm.active} onChange={e => setPlanForm({ ...planForm, active: e.target.checked })} />
+                            <label htmlFor="planActive" style={{ margin: 0 }}>Ativo</label>
                         </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input type="checkbox" id="planPopular" checked={planForm.is_popular} onChange={e => setPlanForm({ ...planForm, is_popular: e.target.checked })} />
+                            <label htmlFor="planPopular" style={{ margin: 0 }}>Mais Popular (Destaque)</label>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                        <button className="admin-btn-secondary" onClick={() => setShowPlanModal(false)}>Cancelar</button>
+                        <button className="admin-btn-primary neon-glow" onClick={savePlan}><Save size={16} /> Salvar</button>
                     </div>
                 </Modal>
             )}
@@ -547,11 +583,11 @@ const PlansPromosTab = () => {
                     <div className="admin-form">
                         <div className="form-group">
                             <label>Título da Promoção *</label>
-                            <input type="text" className="form-input" placeholder="Ex: Dia do Noivo" value={promoForm.title} onChange={e => setPromoForm({ ...promoForm, title: e.target.value })} />
+                            <input type="text" className="app-form-control" placeholder="Ex: Dia do Noivo" value={promoForm.title} onChange={e => setPromoForm({ ...promoForm, title: e.target.value })} />
                         </div>
                         <div className="form-group">
                             <label>Descrição *</label>
-                            <textarea className="form-input" rows={4} placeholder="Detalhes da promoção..." value={promoForm.description} onChange={e => setPromoForm({ ...promoForm, description: e.target.value })}></textarea>
+                            <textarea className="app-form-control" rows={4} placeholder="Detalhes da promoção..." value={promoForm.description} onChange={e => setPromoForm({ ...promoForm, description: e.target.value })}></textarea>
                         </div>
                         <div className="form-group">
                             <label>Imagem de Destaque (Opcional)</label>
@@ -1143,7 +1179,7 @@ const SubscriptionsTab = () => {
                         <div className="admin-form-group">
                             <label>Status do Plano</label>
                             <select
-                                className="admin-input"
+                                className="app-form-control"
                                 value={selectedSub.status}
                                 onChange={e => setSelectedSub({ ...selectedSub, status: e.target.value })}
                             >
@@ -1188,7 +1224,7 @@ const SubscriptionsTab = () => {
                         <div className="admin-form-group">
                             <label>Anotações Gerais</label>
                             <textarea
-                                className="admin-input"
+                                className="app-form-control"
                                 rows="3"
                                 placeholder="Notas adicionais sobre preferências, alergias, etc."
                                 value={selectedSub.notes || ''}
@@ -1202,7 +1238,7 @@ const SubscriptionsTab = () => {
                             <label>Mês de Início (Referência)</label>
                             <input
                                 type="text"
-                                className="admin-input"
+                                className="app-form-control"
                                 placeholder="Ex: Abril de 2026"
                                 value={selectedSub.start_month || ''}
                                 onChange={e => setSelectedSub({ ...selectedSub, start_month: e.target.value })}

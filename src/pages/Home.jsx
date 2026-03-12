@@ -245,17 +245,19 @@ const Home = () => {
 
             {/* PLAN SUBSCRIPTION MODAL */}
             {isPlanModalOpen && (
-                <div className="admin-notification-overlay" style={{ zIndex: 99999 }}>
-                    <div className="app-modal-content neon-glow" style={{ background: 'var(--color-surface)', borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '450px', position: 'relative', border: '1px solid var(--color-primary)' }}>
-                        <button
-                            className="notification-close-btn"
-                            onClick={() => setIsPlanModalOpen(false)}
-                            style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', color: '#888', cursor: 'pointer' }}
-                        >
-                            <X size={24} />
-                        </button>
-                        <h2 style={{ fontSize: '1.4rem', marginBottom: '8px', color: '#fff' }}>Assinar Plano</h2>
-                        <p style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '20px' }}>
+                <div className="modal-overlay" style={{ zIndex: 99999 }}>
+                    <div className="modal-content" style={{ maxWidth: '480px' }}>
+                        <div className="modal-header">
+                            <h3>Assinar Plano</h3>
+                            <button
+                                className="modal-close"
+                                type="button"
+                                onClick={() => setIsPlanModalOpen(false)}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '16px', marginTop: '-8px' }}>
                             Preencha os dados abaixo para reservar sua assinatura.
                             Você será redirecionado para o WhatsApp para finalizar.
                         </p>
@@ -322,88 +324,89 @@ const Home = () => {
                             setIsPlanModalOpen(false);
                             setSubFormData({ name: '', phone: '', artist_id: '', start_month: '', observation: '' });
                         }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Plano Escolhido</label>
+                            <div className="modal-form">
+                                <div className="form-group">
+                                    <label>Plano Escolhido</label>
                                     <select
+                                        className="app-form-control"
                                         value={selectedPlan?.id || ''}
                                         onChange={(e) => setSelectedPlan(activePlans.find(p => p.id === e.target.value))}
                                         required
-                                        style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
                                     >
                                         {activePlans.map(p => (
-                                            <option key={p.id} value={p.id} style={{ background: '#111' }}>{p.title} - R${p.price}/{p.period}</option>
+                                            <option key={p.id} value={p.id}>{p.title} - R${p.price}/{p.period}</option>
                                         ))}
                                     </select>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Nome Completo *</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                                    <div className="form-group">
+                                        <label>Nome Completo *</label>
                                         <input
                                             type="text"
+                                            className="app-form-control"
                                             placeholder="Ex: João Silva"
                                             value={subFormData.name}
                                             onChange={e => setSubFormData({ ...subFormData, name: e.target.value })}
                                             required
-                                            style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
                                         />
                                     </div>
 
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>WhatsApp *</label>
+                                    <div className="form-group">
+                                        <label>WhatsApp *</label>
                                         <input
                                             type="tel"
+                                            className="app-form-control"
                                             placeholder="(11) 99999-9999"
                                             value={subFormData.phone}
                                             onChange={e => setSubFormData({ ...subFormData, phone: e.target.value })}
                                             required
-                                            style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
                                         />
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Profissional Preferido</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                                    <div className="form-group">
+                                        <label>Profissional Preferido</label>
                                         <select
-                                            value={subFormData.artist_id}
-                                            onChange={e => setSubFormData({ ...subFormData, artist_id: e.target.value })}
-                                            style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
+                                            className="app-form-control"
+                                            value={subFormData.preferred_barber}
+                                            onChange={e => setSubFormData({ ...subFormData, preferred_barber: e.target.value })}
                                         >
-                                            <option value="" style={{ background: '#111' }}>Qualquer profissional</option>
-                                            {artists.map(a => (
-                                                <option key={a.id} value={a.id} style={{ background: '#111' }}>{a.name}</option>
+                                            <option value="">Qualquer um</option>
+                                            {siteData.artists?.map(artist => (
+                                                <option key={artist.id} value={artist.name}>{artist.name}</option>
                                             ))}
                                         </select>
                                     </div>
-
-                                    <div>
-                                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Mês de Início</label>
+                                    <div className="form-group">
+                                        <label>Mês de Início</label>
                                         <input
                                             type="text"
+                                            className="app-form-control"
                                             value={subFormData.start_month}
                                             onChange={e => setSubFormData({ ...subFormData, start_month: e.target.value })}
                                             placeholder="Ex: Abril 2026"
-                                            style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s' }}
                                         />
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: '#ccc', fontWeight: 500 }}>Observações (Opcional)</label>
+                                <div className="form-group">
+                                    <label>Observações (Opcional)</label>
                                     <textarea
                                         rows="2"
+                                        className="app-form-control"
                                         placeholder="Alguma restrição, alergia, ou dúvida específica?"
                                         value={subFormData.observation}
                                         onChange={e => setSubFormData({ ...subFormData, observation: e.target.value })}
-                                        style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none', transition: 'all 0.3s', resize: 'vertical' }}
                                     />
                                 </div>
 
-                                <button type="submit" className="btn-app-primary" style={{ width: '100%', marginTop: '8px', padding: '14px' }}>
-                                    Confirmar e Ir para o WhatsApp
-                                </button>
+                                <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '4px' }}>
+                                    <button type="submit" className="btn-app-primary" style={{ padding: '14px 36px', width: 'auto', minWidth: '220px', fontSize: '0.95rem' }}>
+                                        Confirmar e Ir para o WhatsApp
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
