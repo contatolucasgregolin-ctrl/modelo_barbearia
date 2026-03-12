@@ -89,12 +89,10 @@ export const SiteProvider = ({ children }) => {
                 ]);
 
                 setSiteData({
-                    logo: theme === 'light' ? (branding.logoUrlLight || branding.logoUrl || '') : (branding.logoUrlDark || branding.logoUrl || ''),
-                    logoLight: branding.logoUrlLight || branding.logoUrl || '',
-                    logoDark: branding.logoUrlDark || branding.logoUrl || '',
-                    banner: theme === 'light' ? (branding.bannerUrlLight || branding.bannerUrl || '') : (branding.bannerUrlDark || branding.bannerUrl || ''),
-                    bannerLight: branding.bannerUrlLight || branding.bannerUrl || '',
-                    bannerDark: branding.bannerUrlDark || branding.bannerUrl || '',
+                    logo: branding.logoUrl || branding.logoUrlLight || '',
+                    banner: branding.bannerUrl || branding.bannerUrlLight || '',
+                    logoUrl: branding.logoUrl || branding.logoUrlLight || '', // Helper field
+                    bannerUrl: branding.bannerUrl || branding.bannerUrlLight || '', // Helper field
                     menuTitle: branding.menuTitle || 'BARBEARIA CLÁSSICA',
                     heroTitle: branding.heroTitle || 'BARBEARIA CLÁSSICA',
                     heroSubtitle: branding.heroSubtitle || 'Estilo Clássico. Atendimento Premium.',
@@ -124,9 +122,75 @@ export const SiteProvider = ({ children }) => {
         };
 
         fetchSiteData();
-    }, []);
+    }, [theme]); // Added theme here so it re-fetches if theme-specific logic were ever needed, but mainly for sync
 
-    const updateSiteData = () => { };
+    const updateSiteData = async () => {
+        // Simple trick to re-trigger the useEffect: change state or re-fetch manually
+        // For now, let's just re-fetch everything
+        setLoading(true);
+        // Wait for a small delay to ensure DB is updated
+        setTimeout(async () => {
+            const fetchEvent = new CustomEvent('refreshSiteData');
+            window.dispatchEvent(fetchEvent);
+        }, 500);
+    };
+
+    useEffect(() => {
+        const handleRefresh = () => {
+            // Logic to re-fetch
+            const fetchSiteData = async () => {
+                try {
+                    const { data: settingsData } = await supabase.from('settings').select('*');
+                    const { data: servicesData } = await supabase.from('services').select('*').order('name');
+                    const { data: artistsData } = await supabase.from('artists').select('*').eq('active', true).order('name');
+                    const [galleryRes, categoriesRes, plansRes, promosRes] = await Promise.all([
+                        supabase.from('gallery').select('*, gallery_categories(name)').order('featured', { ascending: false }).order('created_at', { ascending: false }),
+                        supabase.from('gallery_categories').select('*').order('name'),
+                        supabase.from('plans').select('*').order('price'),
+                        supabase.from('promotions').select('*').order('created_at', { ascending: false })
+                    ]);
+
+                    let contact = settingsData?.find(s => s.key_name === 'contact')?.value || {};
+                    let branding = settingsData?.find(s => s.key_name === 'branding')?.value || {};
+                    let ops = settingsData?.find(s => s.key_name === 'operating_hours')?.value || {};
+
+                    setSiteData(prev => ({
+                        ...prev,
+                        logo: branding.logoUrl || '',
+                        banner: branding.bannerUrl || '',
+                        logoUrl: branding.logoUrl || '',
+                        bannerUrl: branding.bannerUrl || '',
+                        menuTitle: branding.menuTitle || 'BARBEARIA CLÁSSICA',
+                        heroTitle: branding.heroTitle || 'BARBEARIA CLÁSSICA',
+                        heroSubtitle: branding.heroSubtitle || 'Estilo Clássico. Atendimento Premium.',
+                        contact: {
+                            ...prev.contact,
+                            phone: contact.phone || prev.contact.phone,
+                            whatsapp: contact.whatsapp || prev.contact.whatsapp,
+                            instagram: contact.instagram || prev.contact.instagram,
+                            address: contact.address || prev.contact.address
+                        },
+                        services: (servicesData || []).map(s => ({
+                            id: s.id,
+                            name: s.name,
+                            desc: s.description,
+                            price: parseFloat(s.price),
+                            duration: `${s.duration_mins}min`,
+                            isFeatured: s.is_featured
+                        })),
+                        plans: plansRes.data || [],
+                        promotions: promosRes.data || []
+                    }));
+                } finally {
+                    setLoading(false);
+                }
+            };
+            fetchSiteData();
+        };
+
+        window.addEventListener('refreshSiteData', handleRefresh);
+        return () => window.removeEventListener('refreshSiteData', handleRefresh);
+    }, []);
 
     return (
         <SiteContext.Provider value={{ siteData, updateSiteData, loading, theme, toggleTheme }}>

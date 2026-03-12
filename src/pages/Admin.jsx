@@ -2172,11 +2172,7 @@ const SettingsTab = () => {
         instagram: '',
         address: '',
         logoUrl: '',
-        logoUrlLight: '',
-        logoUrlDark: '',
         bannerUrl: '',
-        bannerUrlLight: '',
-        bannerUrlDark: '',
         menuTitle: '',
         heroTitle: '',
         heroSubtitle: '',
@@ -2208,12 +2204,8 @@ const SettingsTab = () => {
                     whatsapp: contact.whatsapp || '',
                     instagram: contact.instagram || '',
                     address: contact.address || '',
-                    logoUrl: branding.logoUrl || '',
-                    logoUrlLight: branding.logoUrlLight || '',
-                    logoUrlDark: branding.logoUrlDark || '',
-                    bannerUrl: branding.bannerUrl || '',
-                    bannerUrlLight: branding.bannerUrlLight || '',
-                    bannerUrlDark: branding.bannerUrlDark || '',
+                    logoUrl: branding.logoUrl || branding.logoUrlLight || '',
+                    bannerUrl: branding.bannerUrl || branding.bannerUrlLight || '',
                     menuTitle: branding.menuTitle || '',
                     heroTitle: branding.heroTitle || '',
                     heroSubtitle: branding.heroSubtitle || '',
@@ -2242,11 +2234,7 @@ const SettingsTab = () => {
         };
         const brandingPayload = {
             logoUrl: form.logoUrl,
-            logoUrlLight: form.logoUrlLight,
-            logoUrlDark: form.logoUrlDark,
             bannerUrl: form.bannerUrl,
-            bannerUrlLight: form.bannerUrlLight,
-            bannerUrlDark: form.bannerUrlDark,
             menuTitle: form.menuTitle,
             heroTitle: form.heroTitle,
             heroSubtitle: form.heroSubtitle
@@ -2263,6 +2251,7 @@ const SettingsTab = () => {
             return alert('Erro ao salvar configurações: ' + error.message);
         }
 
+        await updateSiteData();
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
     };
@@ -2294,73 +2283,33 @@ const SettingsTab = () => {
             <div className="glass-panel" style={{ padding: '20px', borderRadius: 12, marginBottom: 20 }}>
                 <h3 style={{ marginBottom: 16, fontSize: '1.1rem', color: 'var(--color-primary)' }}>🎨 Identidade Visual (Logo e Banner)</h3>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px', marginBottom: '20px' }}>
-                    {/* Logos Section */}
-                    <div>
-                        <h4 style={{ fontSize: '0.9rem', color: '#888', marginBottom: '15px' }}>Logos por Tema</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            {/* Logo Light */}
-                            <div className="form-group glass-panel" style={{ padding: '15px' }}>
-                                <label style={{ display: 'block', marginBottom: '10px' }}>Logo - Modo Claro</label>
-                                {form.logoUrlLight ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', display: 'flex', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
-                                            <img src={form.logoUrlLight} alt="Logo Light preview" style={{ height: '60px', objectFit: 'contain' }} />
-                                        </div>
-                                        <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, logoUrlLight: '' }))} type="button">Remover</button>
-                                    </div>
-                                ) : (
-                                    <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'logoUrlLight')} disabled={uploading.logoUrlLight} className="form-input" />
-                                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '20px' }}>
+                    <div className="form-group">
+                        <label>Logotipo Principal</label>
+                        {form.logoUrl ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '8px', display: 'flex', justifyContent: 'center' }}>
+                                    <img src={form.logoUrl} alt="Logo preview" style={{ height: '80px', objectFit: 'contain' }} />
+                                </div>
+                                <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, logoUrl: '' }))} type="button">Remover / Trocar</button>
                             </div>
-
-                            {/* Logo Dark */}
-                            <div className="form-group glass-panel" style={{ padding: '15px' }}>
-                                <label style={{ display: 'block', marginBottom: '10px' }}>Logo - Modo Escuro</label>
-                                {form.logoUrlDark ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        <div style={{ background: '#0f172a', padding: '10px', borderRadius: '8px', display: 'flex', justifyContent: 'center', border: '1px solid #1e293b' }}>
-                                            <img src={form.logoUrlDark} alt="Logo Dark preview" style={{ height: '60px', objectFit: 'contain' }} />
-                                        </div>
-                                        <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, logoUrlDark: '' }))} type="button">Remover</button>
-                                    </div>
-                                ) : (
-                                    <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'logoUrlDark')} disabled={uploading.logoUrlDark} className="form-input" />
-                                )}
-                            </div>
-                        </div>
+                        ) : (
+                            <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'logoUrl')} disabled={uploading.logoUrl} className="form-input" />
+                        )}
+                        {uploading.logoUrl && <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '5px' }}>Enviando...</div>}
                     </div>
 
-                    {/* Banners Section */}
-                    <div>
-                        <h4 style={{ fontSize: '0.9rem', color: '#888', marginBottom: '15px' }}>Backgrounds (Hero) por Tema</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            {/* Banner Light */}
-                            <div className="form-group glass-panel" style={{ padding: '15px' }}>
-                                <label style={{ display: 'block', marginBottom: '10px' }}>Banner - Modo Claro</label>
-                                {form.bannerUrlLight ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        <img src={form.bannerUrlLight} alt="Banner Light preview" style={{ height: '80px', width: '100%', objectFit: 'cover', borderRadius: '8px' }} />
-                                        <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, bannerUrlLight: '' }))} type="button">Remover</button>
-                                    </div>
-                                ) : (
-                                    <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'bannerUrlLight')} disabled={uploading.bannerUrlLight} className="form-input" />
-                                )}
+                    <div className="form-group">
+                        <label>Fundo da Home (Banner Hero)</label>
+                        {form.bannerUrl ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <img src={form.bannerUrl} alt="Banner preview" style={{ height: '110px', width: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                                <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, bannerUrl: '' }))} type="button">Remover / Trocar</button>
                             </div>
-
-                            {/* Banner Dark */}
-                            <div className="form-group glass-panel" style={{ padding: '15px' }}>
-                                <label style={{ display: 'block', marginBottom: '10px' }}>Banner - Modo Escuro</label>
-                                {form.bannerUrlDark ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        <img src={form.bannerUrlDark} alt="Banner Dark preview" style={{ height: '80px', width: '100%', objectFit: 'cover', borderRadius: '8px' }} />
-                                        <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, bannerUrlDark: '' }))} type="button">Remover</button>
-                                    </div>
-                                ) : (
-                                    <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'bannerUrlDark')} disabled={uploading.bannerUrlDark} className="form-input" />
-                                )}
-                            </div>
-                        </div>
+                        ) : (
+                            <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'bannerUrl')} disabled={uploading.bannerUrl} className="form-input" />
+                        )}
+                        {uploading.bannerUrl && <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '5px' }}>Enviando...</div>}
                     </div>
                 </div>
 

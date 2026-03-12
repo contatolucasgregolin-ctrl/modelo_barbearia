@@ -43,18 +43,23 @@ const Home = () => {
     const availableServices = siteData?.services || [];
 
 
-    const heroStyle = siteData?.banner ? {
-        backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 10, 0.5) 0%, rgba(10, 10, 10, 1) 100%), url(${siteData.banner})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center'
-    } : {};
+    const getHeroStyle = () => {
+        const banner = siteData?.banner || siteData?.bannerUrl || '';
+        if (!banner) return {};
+        return {
+            backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 10, 0.4) 0%, rgba(10, 10, 10, 0.9) 100%), url(${banner})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed'
+        };
+    };
 
 
     return (
         <div className="home-app">
 
             {/* 1️⃣ HERO (Topo) */}
-            <section className="app-hero" style={heroStyle}>
+            <section className="app-hero" style={getHeroStyle()}>
                 <h1 className="app-title-font app-hero-title">{siteData?.heroTitle || 'BARBEARIA CLÁSSICA'}</h1>
                 <p className="app-hero-subtitle">{siteData?.heroSubtitle || 'Estilo Clássico. Atendimento Premium.'}</p>
                 {siteData?.contact?.instagram && (
@@ -89,8 +94,10 @@ const Home = () => {
                                     <div style={{ position: 'absolute', top: '12px', right: '12px', background: 'var(--color-primary)', color: '#000', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800 }}>PROMOÇÃO</div>
                                     <h3 style={{ fontFamily: 'Montserrat, sans-serif', fontSize: '1.4rem', color: 'var(--color-text)', marginBottom: '8px', textTransform: 'uppercase' }}>{promo.title}</h3>
                                     <p style={{ color: 'var(--color-text-muted)', fontSize: '1rem', whiteSpace: 'pre-line', marginBottom: '20px', lineHeight: '1.5' }}>{promo.description}</p>
-                                    <button className="btn-app-primary" style={{ width: '100%' }} onClick={() => {
-                                        setSelectedPlan(promo); // Reuse selectedPlan or create selectedPromo
+                                    <button className="btn-app-primary" style={{ width: '100%', position: 'relative', zIndex: 10 }} onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setSelectedPlan(promo);
                                         setIsPromoModalOpen(true);
                                     }}>
                                         APROVEITAR PROMOÇÃO
@@ -439,6 +446,7 @@ const Home = () => {
                                     promotion_id: selectedPlan.id,
                                     customer_name: promoFormData.name,
                                     customer_phone: promoFormData.phone,
+                                    preferred_barber: promoFormData.preferred_barber || null,
                                     status: 'pending'
                                 }]);
 
@@ -464,18 +472,20 @@ const Home = () => {
                                         required
                                     />
                                 </div>
-                                <div className="form-group">
-                                    <label>WhatsApp *</label>
-                                    <input
-                                        type="tel"
+                                <div className="admin-form-group" style={{ marginBottom: '15px' }}>
+                                    <label>Profissional Preferido (Opcional)</label>
+                                    <select
                                         className="app-form-control"
-                                        placeholder="(11) 99999-9999"
-                                        value={promoFormData.phone}
-                                        onChange={e => setPromoFormData({ ...promoFormData, phone: e.target.value })}
-                                        required
-                                    />
+                                        value={promoFormData.preferred_barber || ''}
+                                        onChange={e => setPromoFormData({ ...promoFormData, preferred_barber: e.target.value })}
+                                    >
+                                        <option value="">Qualquer um</option>
+                                        {artists?.map(artist => (
+                                            <option key={artist.id} value={artist.name}>{artist.name}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <button type="submit" className="btn-app-primary" style={{ width: '100%', marginTop: '10px' }}>
+                                <button type="submit" className="btn-app-primary" style={{ width: '100%', marginTop: '5px' }}>
                                     CONFIRMAR E IR PARA WHATSAPP
                                 </button>
                             </div>
