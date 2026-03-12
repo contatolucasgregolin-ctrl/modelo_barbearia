@@ -20,11 +20,10 @@ const Home = () => {
         observation: ''
     });
 
+    // -- Separate state for Promo modal --
     const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
-    const [promoFormData, setPromoFormData] = useState({
-        name: '',
-        phone: ''
-    });
+    const [selectedPromo, setSelectedPromo] = useState(null);
+    const [promoFormData, setPromoFormData] = useState({ name: '', phone: '', preferred_barber: '' });
 
     // Populate artists for the dropdown
     useEffect(() => {
@@ -42,7 +41,6 @@ const Home = () => {
     // Filter normal services
     const availableServices = siteData?.services || [];
 
-
     const getHeroStyle = () => {
         const banner = siteData?.banner || siteData?.bannerUrl || '';
         if (!banner) return {};
@@ -54,6 +52,11 @@ const Home = () => {
         };
     };
 
+    const openPromoModal = (promo) => {
+        setSelectedPromo(promo);
+        setPromoFormData({ name: '', phone: '', preferred_barber: '' });
+        setIsPromoModalOpen(true);
+    };
 
     return (
         <div className="home-app">
@@ -80,26 +83,24 @@ const Home = () => {
                     <div className="app-promotions-container fade-in" style={{ marginTop: '20px' }}>
                         {activePromotions.map(promo => (
                             <div key={promo.id} className="app-promo-card neon-glow" style={{
-                                position: 'relative',
                                 borderRadius: '16px',
-                                overflow: 'hidden',
                                 marginBottom: '24px',
                                 background: 'var(--color-surface, #141414)',
                                 border: '1px solid var(--color-primary)'
                             }}>
                                 {promo.image_url && (
-                                    <img src={promo.image_url} alt={promo.title} style={{ width: '100%', height: '200px', objectFit: 'cover', display: 'block' }} />
+                                    <img src={promo.image_url} alt={promo.title} style={{ width: '100%', height: '200px', objectFit: 'cover', display: 'block', borderRadius: '16px 16px 0 0' }} />
                                 )}
-                                <div style={{ padding: '24px', textAlign: 'center' }}>
-                                    <div style={{ position: 'absolute', top: '12px', right: '12px', background: 'var(--color-primary)', color: '#000', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800 }}>PROMOÇÃO</div>
+                                <div style={{ padding: '24px', textAlign: 'center', position: 'relative' }}>
+                                    <div style={{ position: 'absolute', top: '-14px', right: '12px', background: 'var(--color-primary)', color: '#000', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800 }}>PROMOÇÃO</div>
                                     <h3 style={{ fontFamily: 'Montserrat, sans-serif', fontSize: '1.4rem', color: 'var(--color-text)', marginBottom: '8px', textTransform: 'uppercase' }}>{promo.title}</h3>
                                     <p style={{ color: 'var(--color-text-muted)', fontSize: '1rem', whiteSpace: 'pre-line', marginBottom: '20px', lineHeight: '1.5' }}>{promo.description}</p>
-                                    <button className="btn-app-primary" style={{ width: '100%', position: 'relative', cursor: 'pointer', zIndex: 100 }} onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setSelectedPlan(promo);
-                                        setIsPromoModalOpen(true);
-                                    }}>
+                                    <button
+                                        type="button"
+                                        className="btn-app-primary"
+                                        style={{ width: '100%' }}
+                                        onClick={() => openPromoModal(promo)}
+                                    >
                                         APROVEITAR PROMOÇÃO
                                     </button>
                                 </div>
@@ -134,7 +135,6 @@ const Home = () => {
                 <div className="app-section-header">
                     <h2 className="app-title-font app-section-title">💈 PLANOS DE MENSALISTA</h2>
                     <p className="app-section-subtitle">Cortes e barbas ilimitados com condições especiais para clientes do plano.</p>
-
                 </div>
 
                 {activePlans.length > 0 ? (
@@ -149,35 +149,33 @@ const Home = () => {
                                 </div>
                                 <ul className="plan-features">
                                     {(plan.features || []).map((feat, idx) => (
-                                        <li key={idx}>{feat}</li>
+                                        <li key={idx}>✅ {feat}</li>
                                     ))}
                                 </ul>
-                                <div className="plan-action">
-                                    <button
-                                        className={plan.is_popular ? "btn-app-small-solid" : "btn-app-small"}
-                                        style={{ width: '100%' }}
-                                        onClick={() => {
-                                            setSelectedPlan(plan);
-                                            // Pre-fill next month by default
-                                            const nextMonth = new Date();
-                                            nextMonth.setMonth(nextMonth.getMonth() + 1);
-                                            const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-
-                                            setSubFormData(prev => ({
-                                                ...prev,
-                                                start_month: monthNames[nextMonth.getMonth()] + ' de ' + nextMonth.getFullYear()
-                                            }));
-                                            setIsPlanModalOpen(true);
-                                        }}
-                                    >
-                                        ASSINAR PLANO
-                                    </button>
-                                </div>
+                                <button
+                                    className="btn-app-primary"
+                                    onClick={() => {
+                                        setSelectedPlan(plan);
+                                        const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+                                        const nextMonth = new Date();
+                                        nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                        setSubFormData({ 
+                                            name: '', 
+                                            phone: '', 
+                                            artist_id: '', 
+                                            start_month: monthNames[nextMonth.getMonth()] + ' de ' + nextMonth.getFullYear(), 
+                                            observation: '' 
+                                        });
+                                        setIsPlanModalOpen(true);
+                                    }}
+                                >
+                                    ASSINAR AGORA
+                                </button>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <p style={{ textAlign: 'center', color: '#888', marginTop: '30px' }}>Nenhum plano disponível no momento.</p>
+                    <div className="app-empty">Nenhum plano disponível no momento.</div>
                 )}
 
                 {/* 5️⃣ IMPORTANT INFO */}
@@ -224,14 +222,10 @@ const Home = () => {
                     )}
                 </div>
 
-                {/* 7️⃣ GALLERY PREVIEW (Estilos de Corte) */}
+                {/* 7️⃣ GALLERY PREVIEW */}
                 <div className="app-section-header" style={{ textAlign: 'left', marginTop: '32px' }}>
                     <h2 className="app-title-font app-section-title">🖼️ GALERIA DE ESTILOS</h2>
-                    <button
-                        className="btn-link"
-                        onClick={() => navigate('/portifolio')}
-                        style={{ fontSize: '0.8rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                    >
+                    <button className="btn-link" onClick={() => navigate('/portifolio')} style={{ fontSize: '0.8rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         Ver todos →
                     </button>
                 </div>
@@ -242,11 +236,6 @@ const Home = () => {
                             <img src={img.image_url} alt="Corte" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         </div>
                     ))}
-                    {(!siteData?.gallery || siteData.gallery.length === 0) && (
-                        <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '20px', color: '#666', fontSize: '0.9rem' }}>
-                            Acompanhe nossos trabalhos recentes.
-                        </div>
-                    )}
                 </div>
 
                 <div style={{ textAlign: 'center', marginTop: '20px' }}>
@@ -257,117 +246,56 @@ const Home = () => {
 
             </div>
 
-            {/* PLAN SUBSCRIPTION MODAL */}
+            {/* 📋 MODALS (Top Level) */}
             {isPlanModalOpen && (
-                <div className="modal-overlay" style={{ zIndex: 99999 }}>
-                    <div className="modal-content" style={{ maxWidth: '480px' }}>
-                        <div className="modal-header">
-                            <h3>Assinar Plano</h3>
-                            <button
-                                className="modal-close"
-                                type="button"
-                                onClick={() => setIsPlanModalOpen(false)}
-                            >
-                                <X size={18} />
+                <div className="app-modal-overlay fade-in">
+                    <div className="app-modal-content slide-up">
+                        <div className="app-modal-header">
+                            <h3 className="app-title-font">ASSINAR: {selectedPlan?.title}</h3>
+                            <button className="app-modal-close" onClick={() => setIsPlanModalOpen(false)}>
+                                <X size={24} />
                             </button>
                         </div>
-                        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '16px', marginTop: '-8px' }}>
-                            Preencha os dados abaixo para reservar sua assinatura.
-                            Você será redirecionado para o WhatsApp para finalizar.
-                        </p>
+                        <p className="app-modal-subtitle">Seja um de nossos mensalistas e tenha benefícios exclusivos!</p>
 
                         <form onSubmit={async (e) => {
                             e.preventDefault();
-                            if (!subFormData.name || !subFormData.phone || !selectedPlan) {
-                                alert("Por favor, preencha nome e WhatsApp.");
-                                return;
-                            }
-
-                            const cleanPhone = subFormData.phone.replace(/\D/g, '');
-
                             try {
-                                // 1. Look up existing customer or create
-                                let { data: customer } = await supabase
-                                    .from('customers')
-                                    .select('id')
-                                    .eq('phone', cleanPhone)
-                                    .maybeSingle();
+                                const { error } = await supabase.from('plan_subscriptions').insert([{
+                                    plan_id: selectedPlan.id,
+                                    customer_name: subFormData.name,
+                                    customer_phone: subFormData.phone,
+                                    preferred_barber: subFormData.preferred_barber || null,
+                                    start_month: subFormData.start_month,
+                                    observation: subFormData.observation,
+                                    status: 'pending'
+                                }]);
 
-                                let customerId = customer?.id;
+                                if (error) throw error;
 
-                                if (!customerId) {
-                                    const { data: newCust } = await supabase
-                                        .from('customers')
-                                        .insert([{ name: subFormData.name, phone: cleanPhone }])
-                                        .select('id')
-                                        .single();
-                                    customerId = newCust?.id;
-                                }
-
-                                // 2. Create subscription request
-                                if (customerId) {
-                                    const combinedNotes = subFormData.observation
-                                        ? `Assinatura solicitada via site (${selectedPlan.title})\n\nObservação do cliente:\n${subFormData.observation}`
-                                        : `Assinatura solicitada via site (${selectedPlan.title})`;
-
-                                    await supabase.from('plan_subscriptions').insert([{
-                                        customer_id: customerId,
-                                        plan_id: selectedPlan.id,
-                                        status: 'pending',
-                                        artist_id: subFormData.artist_id || null,
-                                        start_month: subFormData.start_month,
-                                        notes: combinedNotes
-                                    }]);
-                                }
-                            } catch (err) {
-                                console.error("Erro ao registrar plano:", err);
+                                const msg = encodeURIComponent(`Olá! Gostaria de assinar o plano "${selectedPlan.title}". Meu nome é ${subFormData.name}.`);
+                                window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=${msg}`, '_blank');
+                                setIsPlanModalOpen(false);
+                            } catch (error) {
+                                console.error('Error saving subscription:', error);
+                                alert('Erro ao registrar interesse: ' + error.message);
                             }
-
-                            // 3. Redirect to WhatsApp
-                            const studioPhone = (siteData?.contact?.whatsapp || '5511939407229').replace(/\D/g, '');
-                            const barberName = artists.find(a => a.id === subFormData.artist_id)?.name || 'Qualquer profissional';
-                            let msg = `Olá! Gostaria de assinar o plano *${selectedPlan.title}*.\n\n`;
-                            msg += `*Meus Dados:*\nNome: ${subFormData.name}\n`;
-                            msg += `*Preferências:*\nProfissional: ${barberName}\nMês de Início: ${subFormData.start_month}\n`;
-                            if (subFormData.observation) {
-                                msg += `\n*Observação:*\n${subFormData.observation}\n`;
-                            }
-                            msg += `\nComo fazemos para concluir a assinatura?`;
-
-                            window.open(`https://api.whatsapp.com/send?phone=${studioPhone}&text=${encodeURIComponent(msg)}`, '_blank');
-                            setIsPlanModalOpen(false);
-                            setSubFormData({ name: '', phone: '', artist_id: '', start_month: '', observation: '' });
                         }}>
-                            <div className="modal-form">
-                                <div className="form-group">
-                                    <label>Plano Escolhido</label>
-                                    <select
-                                        className="app-form-control"
-                                        value={selectedPlan?.id || ''}
-                                        onChange={(e) => setSelectedPlan(activePlans.find(p => p.id === e.target.value))}
-                                        required
-                                    >
-                                        {activePlans.map(p => (
-                                            <option key={p.id} value={p.id}>{p.title} - R${p.price}/{p.period}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                            <div className="app-form">
+                                <div className="form-row">
                                     <div className="form-group">
-                                        <label>Nome Completo *</label>
+                                        <label>Seu Nome *</label>
                                         <input
                                             type="text"
                                             className="app-form-control"
-                                            placeholder="Ex: João Silva"
+                                            placeholder="Seu nome completo"
                                             value={subFormData.name}
                                             onChange={e => setSubFormData({ ...subFormData, name: e.target.value })}
                                             required
                                         />
                                     </div>
-
                                     <div className="form-group">
-                                        <label>WhatsApp *</label>
+                                        <label>WhatsApp (DDD + Número) *</label>
                                         <input
                                             type="tel"
                                             className="app-form-control"
@@ -379,12 +307,12 @@ const Home = () => {
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                                <div className="form-row">
                                     <div className="form-group">
-                                        <label>Profissional Preferido</label>
+                                        <label>Barbeiro de Preferência</label>
                                         <select
                                             className="app-form-control"
-                                            value={subFormData.preferred_barber}
+                                            value={subFormData.preferred_barber || ''}
                                             onChange={e => setSubFormData({ ...subFormData, preferred_barber: e.target.value })}
                                         >
                                             <option value="">Qualquer um</option>
@@ -427,7 +355,6 @@ const Home = () => {
                 </div>
             )}
 
-            {/* 🎁 PROMO INTEREST MODAL */}
             {isPromoModalOpen && (
                 <div className="app-modal-overlay fade-in">
                     <div className="app-modal-content slide-up">
@@ -437,13 +364,13 @@ const Home = () => {
                                 <X size={24} />
                             </button>
                         </div>
-                        <p className="app-modal-subtitle">Confirme seus dados para aproveitar a oferta <strong>{selectedPlan?.title}</strong>.</p>
+                        <p className="app-modal-subtitle">Confirme seus dados para aproveitar a oferta <strong>{selectedPromo?.title}</strong>.</p>
 
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             try {
                                 const { error } = await supabase.from('promotion_interests').insert([{
-                                    promotion_id: selectedPlan.id,
+                                    promotion_id: selectedPromo.id,
                                     customer_name: promoFormData.name,
                                     customer_phone: promoFormData.phone,
                                     preferred_barber: promoFormData.preferred_barber || null,
@@ -452,7 +379,7 @@ const Home = () => {
 
                                 if (error) throw error;
 
-                                const msg = encodeURIComponent(`Olá! Gostaria de aproveitar a oferta "${selectedPlan.title}". Meu nome é ${promoFormData.name}. Poderia me dar mais informações?`);
+                                const msg = encodeURIComponent(`Olá! Gostaria de aproveitar a oferta "${selectedPromo.title}". Meu nome é ${promoFormData.name}. Poderia me dar mais informações?`);
                                 window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=${msg}`, '_blank');
                                 setIsPromoModalOpen(false);
                             } catch (error) {
@@ -472,7 +399,18 @@ const Home = () => {
                                         required
                                     />
                                 </div>
-                                <div className="admin-form-group" style={{ marginBottom: '15px' }}>
+                                <div className="form-group">
+                                    <label>WhatsApp (DDD + Número) *</label>
+                                    <input
+                                        type="tel"
+                                        className="app-form-control"
+                                        placeholder="(11) 99999-9999"
+                                        value={promoFormData.phone}
+                                        onChange={e => setPromoFormData({ ...promoFormData, phone: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <div className="form-group" style={{ marginBottom: '15px' }}>
                                     <label>Profissional Preferido (Opcional)</label>
                                     <select
                                         className="app-form-control"

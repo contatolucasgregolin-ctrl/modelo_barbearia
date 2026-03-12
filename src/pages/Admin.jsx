@@ -2736,73 +2736,87 @@ const PromotionInterestsTab = () => {
             <div className="admin-section-header">
                 <h2 className="admin-section-title">Interessados em Ofertas</h2>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="admin-filter-select">
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="admin-filter-select glass-panel">
                         <option value="all">Todos os Status</option>
                         <option value="pending">Pendentes</option>
                         <option value="contacted">Contatados</option>
                         <option value="completed">Concluídos</option>
                         <option value="cancelled">Cancelados</option>
                     </select>
-                    <button className="admin-add-btn" onClick={fetchInterests}><RefreshCw size={16} /></button>
+                    <button className="admin-refresh-btn neon-glow" onClick={fetchInterests} title="Atualizar">
+                        <RefreshCw size={18} />
+                    </button>
                 </div>
             </div>
 
-            <div className="glass-panel admin-table-container">
-                <table className="admin-table">
-                    <thead>
-                        <tr>
-                            <th>Data</th>
-                            <th>Cliente</th>
-                            <th>Promoção</th>
-                            <th>Status</th>
-                            <th style={{ textAlign: 'right' }}>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {interests.map(item => (
-                            <tr key={item.id}>
-                                <td style={{ fontSize: '0.8rem' }}>{new Date(item.created_at).toLocaleDateString()}</td>
-                                <td>
-                                    <div style={{ fontWeight: 600 }}>{item.customer_name}</div>
-                                    <div style={{ fontSize: '0.8rem', color: '#888' }}>{item.customer_phone}</div>
-                                </td>
-                                <td>{item.promotions?.title || '---'}</td>
-                                <td><StatusBadge status={item.status} /></td>
-                                <td style={{ textAlign: 'right' }}>
-                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                        <button className="admin-action-btn" title="Contactar via WhatsApp" onClick={() => handleWhatsApp(item)} style={{ background: '#25d36622', color: '#25d366' }}>
-                                            <Bell size={16} />
-                                        </button>
-                                        <select
-                                            value={item.status}
-                                            onChange={(e) => updateStatus(item.id, e.target.value)}
-                                            className="admin-status-select"
-                                            style={{
-                                                background: 'var(--color-surface)',
-                                                color: 'var(--color-text)',
-                                                border: '1px solid var(--color-border)',
-                                                borderRadius: '6px',
-                                                fontSize: '0.75rem',
-                                                padding: '4px 8px',
-                                                cursor: 'pointer'
-                                            }}
-                                        >
-                                            <option value="pending">Pendente</option>
-                                            <option value="contacted">Contatado</option>
-                                            <option value="completed">Concluído</option>
-                                            <option value="cancelled">Cancelado</option>
-                                        </select>
-                                        <button className="admin-action-btn delete" onClick={() => removeInterest(item.id)} title="Excluir"><Trash2 size={16} /></button>
+            {interests.length === 0 ? (
+                <div className="admin-empty-state glass-panel">
+                    <Megaphone size={40} className="muted-icon" />
+                    <p>Nenhum interesse registrado com este filtro.</p>
+                </div>
+            ) : (
+                <div className="admin-cards-grid">
+                    {interests.map(item => (
+                        <div key={item.id} className="glass-panel admin-lead-card card-glow">
+                            <div className="lead-card-header">
+                                <div className="lead-date">{new Date(item.created_at).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                                <StatusBadge status={item.status} />
+                            </div>
+
+                            <div className="lead-card-content">
+                                <div className="lead-info-main">
+                                    <div className="lead-name">{item.customer_name}</div>
+                                    <div className="lead-phone">{item.customer_phone}</div>
+                                </div>
+
+                                <div className="lead-offer-box">
+                                    <div className="lead-offer-label">Oferta:</div>
+                                    <div className="lead-offer-title">{item.promotions?.title || '---'}</div>
+                                </div>
+
+                                {item.preferred_barber && (
+                                    <div className="lead-pref-barber">
+                                        <span>Profissional:</span> {item.preferred_barber}
                                     </div>
-                                </td>
-                            </tr>
-                        ))}
-                        {interests.length === 0 && (
-                            <tr><td colSpan="5" className="admin-empty">Nenhum interesse registrado com este filtro.</td></tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                                )}
+                            </div>
+
+                            <div className="lead-card-footer">
+                                <div className="lead-status-actions">
+                                    <select
+                                        value={item.status}
+                                        onChange={(e) => updateStatus(item.id, e.target.value)}
+                                        className="admin-status-select-minimal"
+                                    >
+                                        <option value="pending">Pendente</option>
+                                        <option value="contacted">Contatado</option>
+                                        <option value="completed">Concluído</option>
+                                        <option value="cancelled">Cancelado</option>
+                                    </select>
+                                </div>
+
+                                <div className="lead-main-actions">
+                                    <button
+                                        className="admin-action-btn whatsapp-btn"
+                                        title="Contactar via WhatsApp"
+                                        onClick={() => handleWhatsApp(item)}
+                                    >
+                                        <MessageCircle size={18} />
+                                        <span>WhatsApp</span>
+                                    </button>
+                                    <button
+                                        className="admin-action-btn delete-btn"
+                                        onClick={() => removeInterest(item.id)}
+                                        title="Excluir"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
