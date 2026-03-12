@@ -611,13 +611,18 @@ const DashboardTab = () => {
                 .gte('created_at', today);
 
             // 3. Sessões Realizadas e Faturamento
-            const { data: completedData } = await supabase
-                .from('appointments')
-                .select('session_price')
-                .eq('date', today)
-                .eq('status', 'finished');
+            const appRevenue = completedData?.reduce((acc, curr) => acc + (parseFloat(curr.session_price) || 0), 0) || 0;
 
-            const revenue = completedData?.reduce((acc, curr) => acc + (parseFloat(curr.session_price) || 0), 0) || 0;
+            // 4. Finances (Payments settled today)
+            const { data: financesData } = await supabase
+                .from('finances')
+                .select('amount')
+                .eq('date', today)
+                .eq('type', 'income');
+
+            const finRevenue = financesData?.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0) || 0;
+
+            const revenue = appRevenue + finRevenue;
 
             setStats({
                 todayAppointments: countToday || 0,
@@ -917,6 +922,38 @@ const SubscriptionsTab = () => {
         }
     };
 
+    const handleApproveSubscription = async (sub) => {
+        if (!confirm(`Confirmar pagamento e ativar o plano ${sub.plan.title} para ${sub.customer.name}?`)) return;
+
+        try {
+            // 1. Update subscription status
+            const { error: subError } = await supabase
+                .from('plan_subscriptions')
+                .update({ status: 'active', notes: `${sub.notes || ''}\n[Sistema] Pago e aprovado em ${new Date().toLocaleDateString('pt-BR')}` })
+                .eq('id', sub.id);
+
+            if (subError) throw subError;
+
+            // 2. Log in Finances
+            const { error: finError } = await supabase
+                .from('finances')
+                .insert([{
+                    description: `Mensalidade: ${sub.plan.title} (${sub.customer.name})`,
+                    amount: sub.plan.price,
+                    type: 'income',
+                    category: 'mensalidade'
+                }]);
+
+            if (finError) throw finError;
+
+            alert('Plano ativado e faturamento registrado com sucesso!');
+            fetchSubscriptions();
+        } catch (error) {
+            console.error('Error approving sub:', error);
+            alert('Erro ao processar aprovação: ' + error.message);
+        }
+    };
+
     const handleDelete = async (id) => {
         if (!confirm('Tem certeza que deseja excluir esta assinatura?')) return;
         await supabase.from('plan_subscriptions').delete().eq('id', id);
@@ -970,11 +1007,21 @@ const SubscriptionsTab = () => {
                                         {sub.notes || '-'}
                                     </td>
                                     <td style={{ textAlign: 'right' }}>
+                                        {sub.status === 'pending' && (
+                                            <button
+                                                className="admin-action-btn confirm"
+                                                onClick={() => handleApproveSubscription(sub)}
+                                                title="Aprovar Pagamento e Ativar"
+                                                style={{ marginRight: 8, background: '#4ade8022', color: '#4ade80' }}
+                                            >
+                                                <Check size={16} />
+                                            </button>
+                                        )}
                                         <button className="admin-action-btn" onClick={() => handleEdit(sub)} title="Editar"><Pencil size={16} /></button>
                                         <button className="admin-action-btn delete" onClick={() => handleDelete(sub.id)} title="Excluir"><Trash2 size={16} /></button>
                                         {sub.customer?.phone && (
                                             <button className="admin-action-btn bg-green-900/40 text-green-400 hover:bg-green-800/60" title="WhatsApp" onClick={() => {
-                                                const cleanPhone = sub.customer.phone.replace(/\D/g, '');
+                                                const cleanPhone = (sub.customer.phone || '').replace(/\D/g, '');
                                                 window.open(`https://wa.me/55${cleanPhone}`, '_blank');
                                             }}>Wpp</button>
                                         )}
@@ -1723,20 +1770,24 @@ const FinancesTab = () => {
 
     const fetchFinances = useCallback(async () => {
         setLoading(true);
-        // We'll calculate finances based on appointments
-        const { data } = await supabase.from('appointments').select(`
+        // 1. Get appointments
+        const { data: appointmentsData } = await supabase.from('appointments').select(`
             *,
             customers(name),
             services(name)
-                `).order('date', { ascending: false });
-        if (data) {
+        `).order('date', { ascending: false });
+
+        // 2. Get direct finances (new table)
+        const { data: finData } = await supabase.from('finances').select('*').order('date', { ascending: false });
+
+        if (appointmentsData) {
             let real = 0;
             let previsto = 0;
             let perdidos = 0;
             let depositos = 0;
-            const txs = [];
+            let txs = [];
 
-            data.forEach(app => {
+            appointmentsData.forEach(app => {
                 const sPrice = parseFloat(app.session_price) || 0;
                 const dPrice = parseFloat(app.deposit_price) || 0;
                 const clientName = app.client_name || app.customers?.name || 'Cliente';
@@ -1744,20 +1795,20 @@ const FinancesTab = () => {
 
                 if (app.status === 'cancelled') {
                     perdidos += sPrice;
-                    txs.push({ id: `canc - ${app.id} `, date: app.date, desc: `Cancelamento: ${serviceName} (${clientName})`, amount: -sPrice, type: 'expense' });
-                } else if (app.status === 'completed') {
+                    txs.push({ id: `canc-${app.id}`, date: app.date, desc: `Cancelamento: ${serviceName} (${clientName})`, amount: -sPrice, type: 'expense' });
+                } else if (app.status === 'finished') {
                     // Entire session is realized
                     real += sPrice;
                     const remaining = sPrice - (app.deposit_status === 'paid' ? dPrice : 0);
 
                     if (app.deposit_status === 'paid') {
                         depositos += dPrice;
-                        txs.push({ id: `dep-${app.id} `, date: app.date, desc: `Sinal: ${serviceName} (${clientName})`, amount: dPrice, type: 'income' });
+                        txs.push({ id: `dep-${app.id}`, date: app.date, desc: `Sinal: ${serviceName} (${clientName})`, amount: dPrice, type: 'income' });
                     }
                     if (remaining > 0) {
-                        txs.push({ id: `ses - ${app.id} `, date: app.date, desc: `Sessão Finalizada: ${serviceName} (${clientName})`, amount: remaining, type: 'income' });
+                        txs.push({ id: `ses-${app.id}`, date: app.date, desc: `Sessão Finalizada: ${serviceName} (${clientName})`, amount: remaining, type: 'income' });
                     } else if (remaining === 0 && app.deposit_status !== 'paid' && sPrice > 0) {
-                        txs.push({ id: `ses - ${app.id} `, date: app.date, desc: `Sessão Finalizada: ${serviceName} (${clientName})`, amount: sPrice, type: 'income' });
+                        txs.push({ id: `ses-${app.id}`, date: app.date, desc: `Sessão Finalizada: ${serviceName} (${clientName})`, amount: sPrice, type: 'income' });
                     }
                 } else {
                     // Pending or Confirmed
@@ -1765,10 +1816,27 @@ const FinancesTab = () => {
                     if (app.deposit_status === 'paid') {
                         real += dPrice;
                         depositos += dPrice;
-                        txs.push({ id: `dep - ${app.id} `, date: app.date, desc: `Sinal: ${serviceName} (${clientName})`, amount: dPrice, type: 'income' });
+                        txs.push({ id: `dep-${app.id}`, date: app.date, desc: `Sinal: ${serviceName} (${clientName})`, amount: dPrice, type: 'income' });
                     }
                 }
             });
+
+            // Merge finances table data
+            if (finData) {
+                finData.forEach(f => {
+                    const amount = parseFloat(f.amount) || 0;
+                    if (f.type === 'income') {
+                        real += amount;
+                        txs.push({ id: `fin-${f.id}`, date: f.date, desc: f.description, amount: amount, type: 'income' });
+                    } else {
+                        real -= amount;
+                        txs.push({ id: `fin-${f.id}`, date: f.date, desc: f.description, amount: amount, type: 'expense' });
+                    }
+                });
+            }
+
+            // Sort by date descending
+            txs = txs.sort((a, b) => new Date(b.date) - new Date(a.date));
 
             setFinances({
                 faturamentoReal: real,

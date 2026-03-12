@@ -8,6 +8,9 @@ import '../styles/Home.css';
 const Home = () => {
     const navigate = useNavigate();
     const { siteData } = useContext(SiteContext);
+    const [selectedPlan, setSelectedPlan] = useState(null); // For lead modal
+    const [leadForm, setLeadForm] = useState({ name: '', phone: '' });
+    const [isSavingLead, setIsSavingLead] = useState(false);
 
     // Extract active plans and promotions from context
     const activePlans = (siteData?.plans || []).filter(p => p.active);
@@ -125,22 +128,7 @@ const Home = () => {
                                     <button
                                         className={plan.is_popular ? "btn-app-small-solid" : "btn-app-small"}
                                         style={{ width: '100%' }}
-                                        onClick={() => {
-                                            const phone = (siteData?.contact?.whatsapp || '5511939407229').replace(/\D/g, '');
-                                            const customMsg = plan.whatsapp_message || `Olá! Tenho interesse no plano ${plan.title}. Como posso assinar?`;
-                                            const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(customMsg)}`;
-
-                                            // 1. Open WhatsApp FIRST (must be synchronous to avoid popup blocker)
-                                            window.open(url, '_blank');
-
-                                            // 2. Log lead in background for Admin notification
-                                            supabase.from('plan_subscriptions').insert([{
-                                                customer_id: 'cffc45e1-2941-45f1-a5f2-e3971f6c7837',
-                                                plan_id: plan.id,
-                                                status: 'pending',
-                                                notes: 'Interesse via botão Home'
-                                            }]).catch(err => console.error("Erro no log:", err));
-                                        }}
+                                        onClick={() => setSelectedPlan(plan)}
                                     >
                                         ASSINAR PLANO
                                     </button>
@@ -195,9 +183,120 @@ const Home = () => {
                     ))}
                 </div>
 
+                {/* 7️⃣ GALLERY PREVIEW (Estilos de Corte) */}
+                <div className="app-section-header" style={{ textAlign: 'left', marginTop: '32px' }}>
+                    <h2 className="app-title-font app-section-title">🖼️ GALERIA DE ESTILOS</h2>
+                    <button
+                        className="btn-link"
+                        onClick={() => navigate('/portifolio')}
+                        style={{ fontSize: '0.8rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                    >
+                        Ver todos →
+                    </button>
+                </div>
+
+                <div className="home-gallery-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '12px' }}>
+                    {siteData?.gallery?.slice(0, 4).map(img => (
+                        <div key={img.id} className="home-gallery-item glass-panel" onClick={() => navigate('/portifolio')} style={{ borderRadius: '12px', overflow: 'hidden', height: '140px' }}>
+                            <img src={img.image_url} alt="Corte" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                    ))}
+                    {(!siteData?.gallery || siteData.gallery.length === 0) && (
+                        <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '20px', color: '#666', fontSize: '0.9rem' }}>
+                            Acompanhe nossos trabalhos recentes.
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ textAlign: 'center', marginTop: '20px' }}>
+                    <button className="btn-app-secondary" style={{ width: '100%' }} onClick={() => navigate('/portifolio')}>
+                        GALERIA COMPLETA
+                    </button>
+                </div>
+
             </div>
 
-        </div>
+            {/* ── LEAD COLLECTION MODAL ── */}
+            {
+                selectedPlan && (
+                    <div className="app-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
+                        <div className="glass-panel scale-in" style={{ width: '100%', maxWidth: '400px', padding: '24px', position: 'relative', border: '1px solid var(--color-primary)' }}>
+                            <button onClick={() => setSelectedPlan(null)} style={{ position: 'absolute', top: '12px', right: '12px', background: 'none', border: 'none', color: '#888' }}><X size={20} /></button>
+
+                            <h3 className="app-title-font" style={{ fontSize: '1.2rem', color: 'var(--color-primary)', marginBottom: '8px' }}>Quase lá!</h3>
+                            <p style={{ fontSize: '0.9rem', color: '#ccc', marginBottom: '20px' }}>Para iniciarmos sua assinatura do <strong>{selectedPlan.title}</strong>, informe seu contato:</p>
+
+                            <div className="form-group" style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: '#888', marginBottom: '6px' }}>Nome Completo</label>
+                                <input
+                                    className="form-input"
+                                    placeholder="Seu nome"
+                                    value={leadForm.name}
+                                    onChange={e => setLeadForm(f => ({ ...f, name: e.target.value }))}
+                                    style={{ width: '100%', padding: '12px', background: '#111', border: '1px solid #333', color: '#fff', borderRadius: '8px' }}
+                                />
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: '24px' }}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: '#888', marginBottom: '6px' }}>WhatsApp</label>
+                                <input
+                                    className="form-input"
+                                    placeholder="(00) 00000-0000"
+                                    type="tel"
+                                    value={leadForm.phone}
+                                    onChange={e => setLeadForm(f => ({ ...f, phone: e.target.value }))}
+                                    style={{ width: '100%', padding: '12px', background: '#111', border: '1px solid #333', color: '#fff', borderRadius: '8px' }}
+                                />
+                            </div>
+
+                            <button
+                                className="btn-app-primary"
+                                style={{ width: '100%' }}
+                                disabled={isSavingLead || !leadForm.name || !leadForm.phone}
+                                onClick={async () => {
+                                    setIsSavingLead(true);
+                                    try {
+                                        // 1. Create or Find Customer
+                                        const { data: customer, error: custError } = await supabase
+                                            .from('customers')
+                                            .upsert({ name: leadForm.name, phone: leadForm.phone }, { onConflict: 'phone' })
+                                            .select()
+                                            .single();
+
+                                        if (custError) throw custError;
+
+                                        // 2. Log Subscription Lead
+                                        await supabase.from('plan_subscriptions').insert([{
+                                            customer_id: customer.id,
+                                            plan_id: selectedPlan.id,
+                                            status: 'pending',
+                                            notes: 'Solicitado via Home'
+                                        }]);
+
+                                        // 3. Open WhatsApp
+                                        const phone = (siteData?.contact?.whatsapp || '5511939407229').replace(/\D/g, '');
+                                        const customMsg = selectedPlan.whatsapp_message || `Olá! Tenho interesse no plano ${selectedPlan.title}. Acabei de preencher meus dados no site.`;
+                                        const url = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(customMsg)}`;
+
+                                        window.open(url, '_blank');
+                                        setSelectedPlan(null);
+                                        setLeadForm({ name: '', phone: '' });
+                                    } catch (err) {
+                                        console.error(err);
+                                        alert('Erro ao processar solicitação. Tente novamente.');
+                                    } finally {
+                                        setIsSavingLead(false);
+                                    }
+                                }}
+                            >
+                                {isSavingLead ? 'Processando...' : 'FINALIZAR E IR PARA WHATSAPP'}
+                            </button>
+                        </div>
+                    </div>
+                )
+            }
+
+        </div >
     );
 };
 

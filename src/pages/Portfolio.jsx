@@ -56,9 +56,9 @@ const Portfolio = () => {
 
     return (
         <div className="page portfolio-page container fade-in">
-            <h2 className="page-title">Nosso Portfólio</h2>
+            <h2 className="page-title">Nossa Galeria</h2>
             <p className="portfolio-desc">
-                Conheça algumas das nossas tatuagens separadas por estilos
+                Conheça alguns dos nossos cortes separados por estilos
             </p>
 
             {categories.length > 0 && (
