@@ -35,11 +35,7 @@ const Home = () => {
         backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 10, 0.5) 0%, rgba(10, 10, 10, 1) 100%), url(${siteData.banner})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center'
-    } : {
-        backgroundImage: `linear-gradient(to bottom, rgba(10, 10, 10, 0.5) 0%, rgba(10, 10, 10, 1) 100%), url('/barbershop_hero.jpg')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center'
-    };
+    } : {};
 
     const handlePlanSubmit = async (e) => {
         e.preventDefault();
