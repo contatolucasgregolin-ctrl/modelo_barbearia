@@ -1101,6 +1101,81 @@ input[type="file"]::file-selector-button:hover {
     border-color: #ef4444;
 }
 
+/* ── Usage Tracking UI ── */
+.usage-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 16px;
+    margin-top: 8px;
+    border-radius: 12px;
+    border: 1px solid var(--color-border);
+}
+
+.usage-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.usage-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.usage-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    color: var(--color-text);
+}
+
+.usage-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.usage-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: all 0.2s;
+}
+
+.usage-btn:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    color: var(--color-primary);
+}
+
+.usage-btn:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.usage-value {
+    font-weight: 700;
+    font-size: 1.1rem;
+    min-width: 24px;
+    text-align: center;
+    color: var(--color-primary);
+}
+
 .admin-action-btn.confirm:hover {
     background: rgba(74, 222, 128, 0.15);
     color: #4ade80;

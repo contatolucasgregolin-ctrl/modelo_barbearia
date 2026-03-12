@@ -1,13 +1,32 @@
-import { useContext } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SiteContext } from '../context/SiteContext';
 import { supabase } from '../lib/supabase';
-import { MapPin, Star, Info } from 'lucide-react';
+import { MapPin, Star, Info, X } from 'lucide-react';
 import '../styles/Home.css';
 
 const Home = () => {
     const navigate = useNavigate();
     const { siteData } = useContext(SiteContext);
+
+    const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+    const [selectedPlan, setSelectedPlan] = useState(null);
+    const [artists, setArtists] = useState([]);
+    const [subFormData, setSubFormData] = useState({
+        name: '',
+        phone: '',
+        artist_id: '',
+        start_month: ''
+    });
+
+    // Populate artists for the dropdown
+    useEffect(() => {
+        const fetchArtists = async () => {
+            const { data } = await supabase.from('artists').select('*').eq('active', true);
+            if (data) setArtists(data);
+        };
+        fetchArtists();
+    }, []);
 
     // Extract active plans and promotions from context
     const activePlans = (siteData?.plans || []).filter(p => p.active);
@@ -125,43 +144,18 @@ const Home = () => {
                                     <button
                                         className={plan.is_popular ? "btn-app-small-solid" : "btn-app-small"}
                                         style={{ width: '100%' }}
-                                        onClick={async () => {
-                                            const phone = (siteData?.contact?.whatsapp || '5511939407229').replace(/\D/g, '');
-                                            const msg = plan.whatsapp_message || `Olá! Gostaria de assinar o plano ${plan.title}. Como podemos prosseguir?`;
+                                        onClick={() => {
+                                            setSelectedPlan(plan);
+                                            // Pre-fill next month by default
+                                            const nextMonth = new Date();
+                                            nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                            const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-                                            // Silent log to trigger Admin notification
-                                            try {
-                                                // 1. Get or Create a 'Site Lead' customer profile to satisfy DB constraints
-                                                const { data: leadCustomer } = await supabase
-                                                    .from('customers')
-                                                    .select('id')
-                                                    .eq('phone', '00000000000')
-                                                    .maybeSingle();
-
-                                                let customerId = leadCustomer?.id;
-
-                                                if (!customerId) {
-                                                    const { data: newLead } = await supabase
-                                                        .from('customers')
-                                                        .insert([{ name: '[SITE] Novo Interessado', phone: '00000000000' }])
-                                                        .select('id')
-                                                        .single();
-                                                    customerId = newLead?.id;
-                                                }
-
-                                                if (customerId) {
-                                                    await supabase.from('plan_subscriptions').insert([{
-                                                        customer_id: customerId,
-                                                        plan_id: plan.id,
-                                                        status: 'pending',
-                                                        notes: `Interesse manifestado via clique no site: "${plan.title}"`
-                                                    }]);
-                                                }
-                                            } catch (e) {
-                                                console.error("Erro ao registrar lead:", e);
-                                            }
-
-                                            window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`, '_blank');
+                                            setSubFormData(prev => ({
+                                                ...prev,
+                                                start_month: monthNames[nextMonth.getMonth()] + ' de ' + nextMonth.getFullYear()
+                                            }));
+                                            setIsPlanModalOpen(true);
                                         }}
                                     >
                                         ASSINAR PLANO
@@ -171,9 +165,7 @@ const Home = () => {
                         ))}
                     </div>
                 ) : (
-                    <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>
-                        Nenhum plano disponível no momento.
-                    </div>
+                    <p style={{ textAlign: 'center', color: '#888', marginTop: '30px' }}>Nenhum plano disponível no momento.</p>
                 )}
 
                 {/* 5️⃣ IMPORTANT INFO */}
@@ -249,6 +241,156 @@ const Home = () => {
                 </div>
 
             </div>
+
+            {/* PLAN SUBSCRIPTION MODAL */}
+            {isPlanModalOpen && (
+                <div className="admin-notification-overlay" style={{ zIndex: 99999 }}>
+                    <div className="app-modal-content neon-glow" style={{ background: 'var(--color-surface)', borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '450px', position: 'relative', border: '1px solid var(--color-primary)' }}>
+                        <button
+                            className="notification-close-btn"
+                            onClick={() => setIsPlanModalOpen(false)}
+                            style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', color: '#888', cursor: 'pointer' }}
+                        >
+                            <X size={24} />
+                        </button>
+                        <h2 style={{ fontSize: '1.4rem', marginBottom: '8px', color: '#fff' }}>Assinar Plano</h2>
+                        <p style={{ color: '#aaa', fontSize: '0.9rem', marginBottom: '20px' }}>
+                            Preencha os dados abaixo para reservar sua assinatura.
+                            Você será redirecionado para o WhatsApp para finalizar.
+                        </p>
+
+                        <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            if (!subFormData.name || !subFormData.phone || !selectedPlan) {
+                                alert("Por favor, preencha nome e WhatsApp.");
+                                return;
+                            }
+
+                            const cleanPhone = subFormData.phone.replace(/\D/g, '');
+
+                            try {
+                                // 1. Look up existing customer or create
+                                let { data: customer } = await supabase
+                                    .from('customers')
+                                    .select('id')
+                                    .eq('phone', cleanPhone)
+                                    .maybeSingle();
+
+                                let customerId = customer?.id;
+
+                                if (!customerId) {
+                                    const { data: newCust } = await supabase
+                                        .from('customers')
+                                        .insert([{ name: subFormData.name, phone: cleanPhone }])
+                                        .select('id')
+                                        .single();
+                                    customerId = newCust?.id;
+                                }
+
+                                // 2. Create subscription request
+                                if (customerId) {
+                                    await supabase.from('plan_subscriptions').insert([{
+                                        customer_id: customerId,
+                                        plan_id: selectedPlan.id,
+                                        status: 'pending',
+                                        artist_id: subFormData.artist_id || null,
+                                        start_month: subFormData.start_month,
+                                        notes: `Assinatura solicitada via site (${selectedPlan.title})`
+                                    }]);
+                                }
+                            } catch (err) {
+                                console.error("Erro ao registrar plano:", err);
+                            }
+
+                            // 3. Redirect to WhatsApp
+                            const studioPhone = (siteData?.contact?.whatsapp || '5511939407229').replace(/\D/g, '');
+                            const barberName = artists.find(a => a.id === subFormData.artist_id)?.name || 'Qualquer profissional';
+                            let msg = `Olá! Gostaria de assinar o plano *${selectedPlan.title}*.\n\n`;
+                            msg += `*Meus Dados:*\nNome: ${subFormData.name}\n`;
+                            msg += `*Preferências:*\nProfissional: ${barberName}\nMês de Início: ${subFormData.start_month}\n\n`;
+                            msg += `Como fazemos para concluir a assinatura?`;
+
+                            window.open(`https://api.whatsapp.com/send?phone=${studioPhone}&text=${encodeURIComponent(msg)}`, '_blank');
+                            setIsPlanModalOpen(false);
+                            setSubFormData({ name: '', phone: '', artist_id: '', start_month: '' });
+                        }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Plano Escolhido</label>
+                                    <select
+                                        className="app-input"
+                                        value={selectedPlan?.id || ''}
+                                        onChange={(e) => setSelectedPlan(activePlans.find(p => p.id === e.target.value))}
+                                        required
+                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
+                                    >
+                                        {activePlans.map(p => (
+                                            <option key={p.id} value={p.id}>{p.title} - R${p.price}/{p.period}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Seu Nome Completo *</label>
+                                    <input
+                                        type="text"
+                                        className="app-input"
+                                        placeholder="Ex: João Silva"
+                                        value={subFormData.name}
+                                        onChange={e => setSubFormData({ ...subFormData, name: e.target.value })}
+                                        required
+                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Seu WhatsApp *</label>
+                                    <input
+                                        type="tel"
+                                        className="app-input"
+                                        placeholder="(11) 99999-9999"
+                                        value={subFormData.phone}
+                                        onChange={e => setSubFormData({ ...subFormData, phone: e.target.value })}
+                                        required
+                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Profissional de Preferência</label>
+                                    <select
+                                        className="app-input"
+                                        value={subFormData.artist_id}
+                                        onChange={e => setSubFormData({ ...subFormData, artist_id: e.target.value })}
+                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
+                                    >
+                                        <option value="">Qualquer profissional (Sem preferência)</option>
+                                        {artists.map(a => (
+                                            <option key={a.id} value={a.id}>{a.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: '#ccc' }}>Mês de Início</label>
+                                    <input
+                                        type="text"
+                                        className="app-input"
+                                        value={subFormData.start_month}
+                                        onChange={e => setSubFormData({ ...subFormData, start_month: e.target.value })}
+                                        placeholder="Ex: Abril de 2026"
+                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #333', color: '#fff' }}
+                                    />
+                                </div>
+
+                                <button type="submit" className="btn-app-primary" style={{ width: '100%', marginTop: '8px', padding: '14px' }}>
+                                    Confirmar e Ir para o WhatsApp
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
         </div>
     );

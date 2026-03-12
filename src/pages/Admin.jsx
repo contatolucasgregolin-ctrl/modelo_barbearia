@@ -888,7 +888,8 @@ const SubscriptionsTab = () => {
             .select(`
                 *,
                 customer:customers(name, phone),
-                plan:plans(title, price, period)
+                plan:plans(title, price, period),
+                artist:artists(name)
             `)
             .order('created_at', { ascending: false });
 
@@ -927,7 +928,8 @@ const SubscriptionsTab = () => {
             .update({
                 status: selectedSub.status,
                 notes: selectedSub.notes,
-                features_usage: selectedSub.features_usage
+                features_usage: selectedSub.features_usage,
+                start_month: selectedSub.start_month
             })
             .eq('id', selectedSub.id);
 
@@ -1028,6 +1030,7 @@ const SubscriptionsTab = () => {
                                 <th>Data</th>
                                 <th>Cliente</th>
                                 <th>Plano</th>
+                                <th>Preferências</th>
                                 <th>Status / Validade</th>
                                 <th>Anotações</th>
                                 <th style={{ textAlign: 'right' }}>Ações</th>
@@ -1051,6 +1054,10 @@ const SubscriptionsTab = () => {
                                     <td>
                                         <strong>{sub.plan?.title || 'Plano Removido'}</strong>
                                         <div style={{ fontSize: '0.8rem', color: '#888' }}>R$ {sub.plan?.price} / {sub.plan?.period}</div>
+                                    </td>
+                                    <td>
+                                        <div style={{ fontSize: '0.85rem' }}><strong>Profissional:</strong> {sub.artist?.name || 'Qualquer'}</div>
+                                        <div style={{ fontSize: '0.85rem', color: '#888' }}><strong>Início:</strong> {sub.start_month || 'Imediato'}</div>
                                     </td>
                                     <td>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1146,35 +1153,35 @@ const SubscriptionsTab = () => {
                         </div>
                         <div className="admin-form-group">
                             <label>Controle de Consumo (Mês Atual)</label>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--color-bg-alt)', padding: '15px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>✂️ Cortes Utilizados</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('cortes', -1)}>-</button>
-                                        <span style={{ fontWeight: 800, width: '20px', textAlign: 'center' }}>{selectedSub.features_usage?.cortes || 0}</span>
-                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('cortes', 1)}>+</button>
+                            <div className="usage-card">
+                                <div className="usage-item">
+                                    <span className="usage-label">✂️ Cortes Utilizados</span>
+                                    <div className="usage-controls">
+                                        <button type="button" className="usage-btn" onClick={() => incrementUsage('cortes', -1)}>-</button>
+                                        <span className="usage-value">{selectedSub.features_usage?.cortes || 0}</span>
+                                        <button type="button" className="usage-btn" onClick={() => incrementUsage('cortes', 1)}>+</button>
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>🧔 Barbas Utilizadas</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('barbas', -1)}>-</button>
-                                        <span style={{ fontWeight: 800, width: '20px', textAlign: 'center' }}>{selectedSub.features_usage?.barbas || 0}</span>
-                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('barbas', 1)}>+</button>
+                                <div className="usage-item">
+                                    <span className="usage-label">🧔 Barbas Utilizadas</span>
+                                    <div className="usage-controls">
+                                        <button type="button" className="usage-btn" onClick={() => incrementUsage('barbas', -1)}>-</button>
+                                        <span className="usage-value">{selectedSub.features_usage?.barbas || 0}</span>
+                                        <button type="button" className="usage-btn" onClick={() => incrementUsage('barbas', 1)}>+</button>
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>🥃 Bebidas Cortesia</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('bebidas', -1)}>-</button>
-                                        <span style={{ fontWeight: 800, width: '20px', textAlign: 'center' }}>{selectedSub.features_usage?.bebidas || 0}</span>
-                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('bebidas', 1)}>+</button>
+                                <div className="usage-item">
+                                    <span className="usage-label">🥃 Bebidas Cortesia</span>
+                                    <div className="usage-controls">
+                                        <button type="button" className="usage-btn" onClick={() => incrementUsage('bebidas', -1)}>-</button>
+                                        <span className="usage-value">{selectedSub.features_usage?.bebidas || 0}</span>
+                                        <button type="button" className="usage-btn" onClick={() => incrementUsage('bebidas', 1)}>+</button>
                                     </div>
                                 </div>
-                                <small style={{ color: '#888', marginTop: '5px' }}>
-                                    Atente-se aos limites definidos no plano (ex: VIP = 2 cortes, 1 barba).
-                                </small>
                             </div>
+                            <small style={{ color: '#888', marginTop: '8px', display: 'block' }}>
+                                Atente-se aos limites definidos no plano (ex: VIP = 2 cortes, 1 barba).
+                            </small>
                         </div>
                         <div className="admin-form-group">
                             <label>Anotações Gerais</label>
@@ -1188,6 +1195,16 @@ const SubscriptionsTab = () => {
                             <small style={{ color: '#888', display: 'block', marginTop: '4px' }}>
                                 Fica registrado todo o histórico da assinatura na linha do tempo.
                             </small>
+                        </div>
+                        <div className="admin-form-group">
+                            <label>Mês de Início (Referência)</label>
+                            <input
+                                type="text"
+                                className="admin-input"
+                                placeholder="Ex: Abril de 2026"
+                                value={selectedSub.start_month || ''}
+                                onChange={e => setSelectedSub({ ...selectedSub, start_month: e.target.value })}
+                            />
                         </div>
                         <button type="submit" className="admin-btn-primary" style={{ width: '100%', marginTop: '16px' }}>Salvar Alterações</button>
                     </form>

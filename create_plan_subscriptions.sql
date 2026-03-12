@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS public.plan_subscriptions (
     activated_at TIMESTAMP WITH TIME ZONE,
     expires_at TIMESTAMP WITH TIME ZONE,
     features_usage JSONB DEFAULT '{}'::jsonb,
+    artist_id UUID REFERENCES public.artists(id) ON DELETE SET NULL,
+    start_month TEXT,
     CONSTRAINT status_check CHECK (status IN ('pending', 'active', 'completed', 'cancelled'))
 );
 
