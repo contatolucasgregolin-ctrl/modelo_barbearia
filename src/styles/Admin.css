@@ -338,8 +338,62 @@
     margin-bottom: 4px;
 }
 
-.artist-instagram {
+.admin-instagram {
     font-size: 13px;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+}
+
+/* ── Notification Dropdown Panel ── */
+.admin-bell-panel {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    width: 320px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    z-index: 1100;
+    overflow: hidden;
+}
+
+.admin-bell-panel::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    right: 18px;
+    width: 12px;
+    height: 12px;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    border-left: 1px solid var(--color-border);
+    transform: rotate(45deg);
+}
+
+.bell-panel-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.bell-panel-header h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.bell-panel-content {
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.bell-empty {
+    padding: 30px 16px;
+    text-align: center;
     color: var(--color-text-muted);
     font-size: 0.85rem;
 }
@@ -395,6 +449,83 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* ── Central Popup Alert ── */
+.admin-central-alert-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.admin-central-alert {
+    width: 100%;
+    max-width: 400px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    padding: 32px;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.alert-icon-main {
+    margin-bottom: 20px;
+}
+
+.admin-central-alert h3 {
+    margin: 0 0 12px;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.admin-central-alert p {
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
+
+.alert-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.alert-actions button {
+    flex: 1;
+}
+
+@keyframes bounceIn {
+    0% {
+        transform: scale(0.3);
+        opacity: 0;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 1;
+    }
+
+    70% {
+        transform: scale(0.9);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.bounce-in {
+    animation: bounceIn 0.5s ease;
 }
 
 /* ── Card Actions ── */
@@ -1228,10 +1359,15 @@ input[type="file"]::file-selector-button:hover {
 
 .usage-label {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 2px;
     font-weight: 500;
     color: var(--color-text);
+}
+
+.usage-limit-info {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
 }
 
 .usage-controls {
@@ -1274,6 +1410,103 @@ input[type="file"]::file-selector-button:hover {
     min-width: 24px;
     text-align: center;
     color: var(--color-primary);
+}
+
+/* ── Table Usage Badges ── */
+.table-usage-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--color-bg-alt);
+    padding: 6px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    font-size: 0.9rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.table-usage-badge:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-primary);
+    box-shadow: 0 4px 12px var(--color-glow);
+    background: var(--color-surface);
+}
+
+.usage-icon {
+    font-size: 1.2rem;
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.2));
+}
+
+.usage-numbers {
+    font-weight: 700;
+    color: var(--color-text);
+    min-width: 35px;
+    text-align: center;
+}
+
+.usage-plus-btn,
+.usage-minus-btn {
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.usage-plus-btn:hover:not(:disabled) {
+    background: #FF5500;
+    transform: scale(1.1);
+}
+
+.usage-minus-btn {
+    background: #444;
+}
+
+.usage-minus-btn:hover:not(:disabled) {
+    background: #ef4444;
+    transform: scale(1.1);
+}
+
+.usage-plus-btn:disabled,
+.usage-minus-btn:disabled {
+    background: #222;
+    cursor: not-allowed;
+    opacity: 0.3;
+}
+
+/* ── Custom Scrollbar for Light Mode (Horizontal Scroll Fix) ── */
+[data-theme="light"] .admin-table-wrap::-webkit-scrollbar {
+    height: 10px;
+}
+
+[data-theme="light"] .admin-table-wrap::-webkit-scrollbar-track {
+    background: #e2e8f0;
+    border-radius: 10px;
+}
+
+[data-theme="light"] .admin-table-wrap::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 10px;
+    border: 2px solid #e2e8f0;
+}
+
+[data-theme="light"] .admin-table-wrap::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+/* Firefox scrollbar for light mode */
+[data-theme="light"] .admin-table-wrap {
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #e2e8f0;
 }
 
 .admin-action-btn.confirm:hover {

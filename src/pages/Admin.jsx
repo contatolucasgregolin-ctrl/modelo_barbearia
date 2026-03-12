@@ -81,6 +81,7 @@ const Admin = () => {
     const [unreadCount, setUnreadCount] = useState(0);
     const [showBellPanel, setShowBellPanel] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [activeAlert, setActiveAlert] = useState(null); // Central pop-up alert
 
     // Navbar scroll state
     const navRef = useRef(null);
@@ -113,13 +114,15 @@ const Admin = () => {
 
                 // Add to persistent notification queue (accumulates multiple)
                 const id = Date.now();
-                setNotificationQueue(q => [...q, {
+                const newNotif = {
                     id,
                     type: 'appointment',
                     title: '🔔 Novo Agendamento!',
                     message: 'Um novo pedido de agendamento foi recebido. Confira na aba Agendamentos.'
-                }]);
+                };
+                setNotificationQueue(q => [...q, newNotif]);
                 setUnreadCount(c => c + 1);
+                setActiveAlert(newNotif);
             })
             .subscribe();
 
@@ -132,13 +135,15 @@ const Admin = () => {
                 } catch (e) { console.warn("Audio autoplay blocked"); }
 
                 const id = Date.now();
-                setNotificationQueue(q => [...q, {
+                const newNotif = {
                     id,
                     type: 'subscription',
                     title: '⭐ Nova Assinatura de Plano!',
                     message: 'Um cliente preencheu os dados para assinar um plano. Confira na aba Mensalistas.'
-                }]);
+                };
+                setNotificationQueue(q => [...q, newNotif]);
                 setUnreadCount(c => c + 1);
+                setActiveAlert(newNotif);
             })
             .subscribe();
 
@@ -187,34 +192,26 @@ const Admin = () => {
 
     return (
         <div className="admin-shell" onClick={() => setShowBellPanel(false)}>
-            {/* ── Bell Dropdown Panel ── */}
-            {showBellPanel && (
-                <div className="admin-bell-panel glass-panel fade-in" onClick={e => e.stopPropagation()}>
-                    <div className="bell-panel-header">
-                        <h4>Notificações Recentes</h4>
-                        {notificationQueue.length > 0 && (
-                            <button onClick={() => { setNotificationQueue([]); setUnreadCount(0); }} className="text-primary" style={{ fontSize: '0.75rem' }}>Limpar Todas</button>
-                        )}
-                    </div>
-                    <div className="bell-panel-content">
-                        {notificationQueue.length === 0 ? (
-                            <div className="bell-empty">Nenhuma nova notificação</div>
-                        ) : (
-                            notificationQueue.map((notif, idx) => (
-                                <div key={idx} className="bell-item" onClick={() => handleNotificationClick(notif)}>
-                                    <div className="bell-item-icon">
-                                        <Bell size={16} />
-                                    </div>
-                                    <div className="bell-item-text">
-                                        <div className="bell-item-title">{notif.title}</div>
-                                        <div className="bell-item-msg">{notif.message}</div>
-                                    </div>
-                                </div>
-                            ))
-                        )}
+            {/* ── Central Pop-up Alert ── */}
+            {activeAlert && (
+                <div className="admin-central-alert-overlay fade-in">
+                    <div className="admin-central-alert glass-panel bounce-in">
+                        <div className="alert-icon-main">
+                            {activeAlert.type === 'subscription' ? <Star size={40} className="neon-text" /> : <Bell size={40} className="neon-text" />}
+                        </div>
+                        <h3>{activeAlert.title}</h3>
+                        <p>{activeAlert.message}</p>
+                        <div className="alert-actions">
+                            <button className="admin-btn-secondary" onClick={() => setActiveAlert(null)}>Fechar</button>
+                            <button className="admin-btn-primary neon-glow" onClick={() => {
+                                handleNotificationClick(activeAlert);
+                                setActiveAlert(null);
+                            }}>Ver Agora</button>
+                        </div>
                     </div>
                 </div>
             )}
+
 
             {/* ── Top Bar ── */}
             <header className="admin-topbar">
@@ -274,6 +271,35 @@ const Admin = () => {
                                     </span>
                                 )}
                             </button>
+
+                            {/* ── Bell Dropdown Panel ── */}
+                            {showBellPanel && (
+                                <div className="admin-bell-panel glass-panel fade-in" onClick={e => e.stopPropagation()}>
+                                    <div className="bell-panel-header">
+                                        <h4>Notificações Recentes</h4>
+                                        {notificationQueue.length > 0 && (
+                                            <button onClick={() => { setNotificationQueue([]); setUnreadCount(0); }} className="text-primary" style={{ fontSize: '0.75rem' }}>Limpar Todas</button>
+                                        )}
+                                    </div>
+                                    <div className="bell-panel-content">
+                                        {notificationQueue.length === 0 ? (
+                                            <div className="bell-empty">Nenhuma nova notificação</div>
+                                        ) : (
+                                            notificationQueue.map((notif, idx) => (
+                                                <div key={idx} className="bell-item" onClick={() => handleNotificationClick(notif)}>
+                                                    <div className="bell-item-icon">
+                                                        <Bell size={16} />
+                                                    </div>
+                                                    <div className="bell-item-text">
+                                                        <div className="bell-item-title">{notif.title}</div>
+                                                        <div className="bell-item-msg">{notif.message}</div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <button onClick={toggleTheme} className="theme-toggle-btn" title="Alternar Tema" style={{ marginRight: '8px' }}>
                             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
@@ -926,7 +952,7 @@ const SubscriptionsTab = () => {
             .select(`
                 *,
                 customer:customers(name, phone),
-                plan:plans(title, price, period),
+                plan:plans(title, price, period, usage_limits),
                 artist:artists(name)
             `)
             .order('created_at', { ascending: false });
@@ -1125,17 +1151,79 @@ const SubscriptionsTab = () => {
                                     </td>
                                     <td style={{ maxWidth: '200px', fontSize: '0.85rem' }}>
                                         {/* Display usage badge if available */}
-                                        {sub.features_usage && sub.status === 'active' && (
-                                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                                                <span style={{ background: 'var(--color-bg-alt)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem' }}>
-                                                    ✂️ Cortes: {sub.features_usage.cortes || 0}
-                                                </span>
-                                                <span style={{ background: 'var(--color-bg-alt)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem' }}>
-                                                    🧔 Barbas: {sub.features_usage.barbas || 0}
-                                                </span>
-                                                <span style={{ background: 'var(--color-bg-alt)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem' }}>
-                                                    🥃 Bebidas: {sub.features_usage.bebidas || 0}
-                                                </span>
+                                        {sub.status === 'active' && (
+                                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                                <div className="table-usage-badge">
+                                                    <span className="usage-icon">✂️</span>
+                                                    <button
+                                                        className="usage-minus-btn"
+                                                        onClick={() => {
+                                                            const newUsage = { ...sub.features_usage, cortes: Math.max(0, (sub.features_usage?.cortes || 0) - 1) };
+                                                            supabase.from('plan_subscriptions').update({ features_usage: newUsage }).eq('id', sub.id).then(() => fetchSubscriptions());
+                                                        }}
+                                                        disabled={!(sub.features_usage?.cortes > 0)}
+                                                        title="Reduzir Uso de Corte"
+                                                    >-</button>
+                                                    <span className="usage-numbers">
+                                                        {sub.features_usage?.cortes || 0}/{sub.plan?.usage_limits?.cortes || 0}
+                                                    </span>
+                                                    <button
+                                                        className="usage-plus-btn"
+                                                        onClick={() => {
+                                                            const newUsage = { ...sub.features_usage, cortes: (sub.features_usage?.cortes || 0) + 1 };
+                                                            supabase.from('plan_subscriptions').update({ features_usage: newUsage }).eq('id', sub.id).then(() => fetchSubscriptions());
+                                                        }}
+                                                        title="Registrar Uso de Corte"
+                                                    >+</button>
+                                                </div>
+
+                                                <div className="table-usage-badge">
+                                                    <span className="usage-icon">🧔</span>
+                                                    <button
+                                                        className="usage-minus-btn"
+                                                        onClick={() => {
+                                                            const newUsage = { ...sub.features_usage, barbas: Math.max(0, (sub.features_usage?.barbas || 0) - 1) };
+                                                            supabase.from('plan_subscriptions').update({ features_usage: newUsage }).eq('id', sub.id).then(() => fetchSubscriptions());
+                                                        }}
+                                                        disabled={!(sub.features_usage?.barbas > 0)}
+                                                        title="Reduzir Uso de Barba"
+                                                    >-</button>
+                                                    <span className="usage-numbers">
+                                                        {sub.features_usage?.barbas || 0}/{sub.plan?.usage_limits?.barbas || 0}
+                                                    </span>
+                                                    <button
+                                                        className="usage-plus-btn"
+                                                        onClick={() => {
+                                                            const newUsage = { ...sub.features_usage, barbas: (sub.features_usage?.barbas || 0) + 1 };
+                                                            supabase.from('plan_subscriptions').update({ features_usage: newUsage }).eq('id', sub.id).then(() => fetchSubscriptions());
+                                                        }}
+                                                        title="Registrar Uso de Barba"
+                                                    >+</button>
+                                                </div>
+
+                                                <div className="table-usage-badge">
+                                                    <span className="usage-icon">🥃</span>
+                                                    <button
+                                                        className="usage-minus-btn"
+                                                        onClick={() => {
+                                                            const newUsage = { ...sub.features_usage, bebidas: Math.max(0, (sub.features_usage?.bebidas || 0) - 1) };
+                                                            supabase.from('plan_subscriptions').update({ features_usage: newUsage }).eq('id', sub.id).then(() => fetchSubscriptions());
+                                                        }}
+                                                        disabled={!(sub.features_usage?.bebidas > 0)}
+                                                        title="Reduzir Consumo de Bebida"
+                                                    >-</button>
+                                                    <span className="usage-numbers">
+                                                        {sub.features_usage?.bebidas || 0}/{sub.plan?.usage_limits?.bebidas || 0}
+                                                    </span>
+                                                    <button
+                                                        className="usage-plus-btn"
+                                                        onClick={() => {
+                                                            const newUsage = { ...sub.features_usage, bebidas: (sub.features_usage?.bebidas || 0) + 1 };
+                                                            supabase.from('plan_subscriptions').update({ features_usage: newUsage }).eq('id', sub.id).then(() => fetchSubscriptions());
+                                                        }}
+                                                        title="Registrar Consumo de Bebida"
+                                                    >+</button>
+                                                </div>
                                             </div>
                                         )}
                                         <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#888' }}>
@@ -1213,7 +1301,10 @@ const SubscriptionsTab = () => {
                             <label>Controle de Consumo (Mês Atual)</label>
                             <div className="usage-card">
                                 <div className="usage-item">
-                                    <span className="usage-label">✂️ Cortes Utilizados</span>
+                                    <div className="usage-label">
+                                        <span>✂️ Cortes Utilizados</span>
+                                        <span className="usage-limit-info">Limite: {selectedSub.plan?.usage_limits?.cortes || 0}</span>
+                                    </div>
                                     <div className="usage-controls">
                                         <button type="button" className="usage-btn" onClick={() => incrementUsage('cortes', -1)}>-</button>
                                         <span className="usage-value">{selectedSub.features_usage?.cortes || 0}</span>
@@ -1221,7 +1312,10 @@ const SubscriptionsTab = () => {
                                     </div>
                                 </div>
                                 <div className="usage-item">
-                                    <span className="usage-label">🧔 Barbas Utilizadas</span>
+                                    <div className="usage-label">
+                                        <span>🧔 Barbas Utilizadas</span>
+                                        <span className="usage-limit-info">Limite: {selectedSub.plan?.usage_limits?.barbas || 0}</span>
+                                    </div>
                                     <div className="usage-controls">
                                         <button type="button" className="usage-btn" onClick={() => incrementUsage('barbas', -1)}>-</button>
                                         <span className="usage-value">{selectedSub.features_usage?.barbas || 0}</span>
@@ -1229,7 +1323,10 @@ const SubscriptionsTab = () => {
                                     </div>
                                 </div>
                                 <div className="usage-item">
-                                    <span className="usage-label">🥃 Bebidas Cortesia</span>
+                                    <div className="usage-label">
+                                        <span>🥃 Bebidas Cortesia</span>
+                                        <span className="usage-limit-info">Limite: {selectedSub.plan?.usage_limits?.bebidas || 0}</span>
+                                    </div>
                                     <div className="usage-controls">
                                         <button type="button" className="usage-btn" onClick={() => incrementUsage('bebidas', -1)}>-</button>
                                         <span className="usage-value">{selectedSub.features_usage?.bebidas || 0}</span>
