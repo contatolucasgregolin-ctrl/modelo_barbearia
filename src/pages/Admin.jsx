@@ -1028,7 +1028,7 @@ const SubscriptionsTab = () => {
                                         )}
                                         <button className="admin-action-btn" onClick={() => handleEdit(sub)} title="Editar"><Pencil size={16} /></button>
                                         <button className="admin-action-btn delete" onClick={() => handleDelete(sub.id)} title="Excluir"><Trash2 size={16} /></button>
-                                        {sub.customer?.phone && (
+                                        {sub.customer?.phone && sub.customer.phone !== '00000000000' && (
                                             <button className="admin-action-btn bg-green-900/40 text-green-400 hover:bg-green-800/60" title="WhatsApp" onClick={() => {
                                                 const cleanPhone = (sub.customer.phone || '').replace(/\D/g, '');
                                                 window.open(`https://wa.me/55${cleanPhone}`, '_blank');

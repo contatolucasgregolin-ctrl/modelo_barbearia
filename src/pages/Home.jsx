@@ -1,6 +1,7 @@
 import { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SiteContext } from '../context/SiteContext';
+import { supabase } from '../lib/supabase';
 import { MapPin, Star, Info } from 'lucide-react';
 import '../styles/Home.css';
 
@@ -124,9 +125,42 @@ const Home = () => {
                                     <button
                                         className={plan.is_popular ? "btn-app-small-solid" : "btn-app-small"}
                                         style={{ width: '100%' }}
-                                        onClick={() => {
+                                        onClick={async () => {
                                             const phone = (siteData?.contact?.whatsapp || '5511939407229').replace(/\D/g, '');
                                             const msg = plan.whatsapp_message || `Olá! Gostaria de assinar o plano ${plan.title}. Como podemos prosseguir?`;
+
+                                            // Silent log to trigger Admin notification
+                                            try {
+                                                // 1. Get or Create a 'Site Lead' customer profile to satisfy DB constraints
+                                                const { data: leadCustomer } = await supabase
+                                                    .from('customers')
+                                                    .select('id')
+                                                    .eq('phone', '00000000000')
+                                                    .maybeSingle();
+
+                                                let customerId = leadCustomer?.id;
+
+                                                if (!customerId) {
+                                                    const { data: newLead } = await supabase
+                                                        .from('customers')
+                                                        .insert([{ name: '[SITE] Novo Interessado', phone: '00000000000' }])
+                                                        .select('id')
+                                                        .single();
+                                                    customerId = newLead?.id;
+                                                }
+
+                                                if (customerId) {
+                                                    await supabase.from('plan_subscriptions').insert([{
+                                                        customer_id: customerId,
+                                                        plan_id: plan.id,
+                                                        status: 'pending',
+                                                        notes: `Interesse manifestado via clique no site: "${plan.title}"`
+                                                    }]);
+                                                }
+                                            } catch (e) {
+                                                console.error("Erro ao registrar lead:", e);
+                                            }
+
                                             window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(msg)}`, '_blank');
                                         }}
                                     >
