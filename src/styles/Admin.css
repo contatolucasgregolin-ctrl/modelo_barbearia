@@ -988,16 +988,25 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .admin-table-wrap::-webkit-scrollbar {
-    height: 6px;
+    height: 10px;
 }
 
 .admin-table-wrap::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    box-shadow: 0 0 10px var(--color-glow);
+}
+
+.admin-table-wrap::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+    background-clip: padding-box;
 }
 
 .admin-table-wrap::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 5px;
 }
 
 /* ── General Cards Grid (Services) ── */
@@ -1489,18 +1498,21 @@ input[type="file"]::file-selector-button:hover {
 }
 
 [data-theme="light"] .admin-table-wrap::-webkit-scrollbar-track {
-    background: #e2e8f0;
-    border-radius: 10px;
+    background: #f1f5f9;
+    border-radius: 5px;
 }
 
 [data-theme="light"] .admin-table-wrap::-webkit-scrollbar-thumb {
-    background: #94a3b8;
-    border-radius: 10px;
-    border: 2px solid #e2e8f0;
+    background: #cbd5e1;
+    border-radius: 5px;
+    border: 2px solid #f1f5f9;
+    background-clip: padding-box;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
 }
 
 [data-theme="light"] .admin-table-wrap::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
+    background: #94a3b8;
+    background-clip: padding-box;
 }
 
 /* Firefox scrollbar for light mode */

@@ -875,7 +875,7 @@ const AppointmentsTab = () => {
                                         type="checkbox"
                                         checked={selectedIds.length === appointments.length && appointments.length > 0}
                                         onChange={toggleSelectAll}
-                                        style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                        style={{ transform: 'scale(0.95)', cursor: 'pointer' }}
                                     />
                                 </th>
                                 <th>Data / Hora</th>
@@ -894,7 +894,7 @@ const AppointmentsTab = () => {
                                             type="checkbox"
                                             checked={selectedIds.includes(app.id)}
                                             onChange={() => toggleSelectOne(app.id)}
-                                            style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                            style={{ transform: 'scale(0.95)', cursor: 'pointer' }}
                                         />
                                     </td>
                                     <td>
@@ -1165,7 +1165,7 @@ const SubscriptionsTab = () => {
                                         type="checkbox"
                                         checked={selectedIds.length === subscriptions.length && subscriptions.length > 0}
                                         onChange={toggleSelectAll}
-                                        style={{ transform: 'scale(1.1)', cursor: 'pointer' }}
+                                        style={{ transform: 'scale(0.95)', cursor: 'pointer' }}
                                     />
                                 </th>
                                 <th>Data</th>
@@ -1189,7 +1189,7 @@ const SubscriptionsTab = () => {
                                             type="checkbox"
                                             checked={selectedIds.includes(sub.id)}
                                             onChange={() => toggleSelectOne(sub.id)}
-                                            style={{ transform: 'scale(1.1)', cursor: 'pointer' }}
+                                            style={{ transform: 'scale(0.95)', cursor: 'pointer' }}
                                         />
                                     </td>
                                     <td>
@@ -1614,7 +1614,7 @@ const CustomersTab = () => {
                                         type="checkbox"
                                         checked={selectedIds.length === customers.length && customers.length > 0}
                                         onChange={toggleSelectAll}
-                                        style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                        style={{ transform: 'scale(0.95)', cursor: 'pointer' }}
                                     />
                                 </th>
                                 <th>Nome</th>
@@ -1632,7 +1632,7 @@ const CustomersTab = () => {
                                             type="checkbox"
                                             checked={selectedIds.includes(c.id)}
                                             onChange={() => toggleSelectOne(c.id)}
-                                            style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                            style={{ transform: 'scale(0.95)', cursor: 'pointer' }}
                                         />
                                     </td>
                                     <td style={{ fontWeight: 'bold' }}>{c.name}</td>
