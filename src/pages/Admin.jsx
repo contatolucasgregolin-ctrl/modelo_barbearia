@@ -100,7 +100,7 @@ const Admin = () => {
 
     // Supabase Real-time listener for New Appointments AND Subscriptions
     useEffect(() => {
-        const appointmentChannel = supabase.channel('public:appointments')
+        const appointmentChannel = supabase.channel('admin-appointments-notify')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' }, payload => {
                 // Play notification sound
                 try {
@@ -121,7 +121,7 @@ const Admin = () => {
             })
             .subscribe();
 
-        const subscriptionChannel = supabase.channel('public:plan_subscriptions')
+        const subscriptionChannel = supabase.channel('admin-subscriptions-notify')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plan_subscriptions' }, payload => {
                 try {
                     const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-30.mp3');
@@ -596,41 +596,50 @@ const DashboardTab = () => {
     useEffect(() => {
         const fetchStats = async () => {
             setLoading(true);
-            const today = new Date().toISOString().split('T')[0];
+            try {
+                const today = new Date().toISOString().split('T')[0];
 
-            // 1. Agendamentos Hoje
-            const { count: countToday } = await supabase
-                .from('appointments')
-                .select('*', { count: 'exact', head: true })
-                .eq('date', today);
+                // 1. Agendamentos Hoje
+                const { count: countToday } = await supabase
+                    .from('appointments')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('date', today);
 
-            // 2. Clientes Novos Hoje
-            const { count: countCustomers } = await supabase
-                .from('customers')
-                .select('*', { count: 'exact', head: true })
-                .gte('created_at', today);
+                // 2. Clientes Novos Hoje
+                const { count: countCustomers } = await supabase
+                    .from('customers')
+                    .select('*', { count: 'exact', head: true })
+                    .gte('created_at', today);
 
-            // 3. Sessões Realizadas e Faturamento
-            const appRevenue = completedData?.reduce((acc, curr) => acc + (parseFloat(curr.session_price) || 0), 0) || 0;
+                // 3. Sessões Finalizadas de hoje
+                const { data: completedData } = await supabase
+                    .from('appointments')
+                    .select('session_price')
+                    .eq('date', today)
+                    .eq('status', 'finished');
 
-            // 4. Finances (Payments settled today)
-            const { data: financesData } = await supabase
-                .from('finances')
-                .select('amount')
-                .eq('date', today)
-                .eq('type', 'income');
+                const appRevenue = (completedData || []).reduce((acc, curr) => acc + (parseFloat(curr.session_price) || 0), 0);
 
-            const finRevenue = financesData?.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0) || 0;
+                // 4. Faturamento via tabela finances (hoje)
+                const { data: financesData } = await supabase
+                    .from('finances')
+                    .select('amount')
+                    .eq('date', today)
+                    .eq('type', 'income');
 
-            const revenue = appRevenue + finRevenue;
+                const finRevenue = (financesData || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
-            setStats({
-                todayAppointments: countToday || 0,
-                newCustomers: countCustomers || 0,
-                completedSessions: completedData?.length || 0,
-                revenue
-            });
-            setLoading(false);
+                setStats({
+                    todayAppointments: countToday || 0,
+                    newCustomers: countCustomers || 0,
+                    completedSessions: (completedData || []).length,
+                    revenue: appRevenue + finRevenue
+                });
+            } catch (err) {
+                console.error('Erro ao carregar dashboard:', err);
+            } finally {
+                setLoading(false);
+            }
         };
         fetchStats();
     }, []);
@@ -890,8 +899,8 @@ const SubscriptionsTab = () => {
     useEffect(() => {
         fetchSubscriptions();
 
-        // Real-time listener to refresh list automatically
-        const channel = supabase.channel('public:plan_subscriptions')
+        // Real-time listener to refresh list automatically (unique channel name to avoid conflict)
+        const channel = supabase.channel('subscriptions-tab-refresh')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_subscriptions' }, () => {
                 fetchSubscriptions();
             })
