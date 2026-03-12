@@ -1,0 +1,64 @@
+/* Minimalist Utilities */
+.subtle-glow {
+    box-shadow: 0 0 10px var(--color-glow);
+    border: 1px solid var(--color-border);
+}
+
+.white-glow {
+    text-shadow: 0 0 8px var(--color-glow);
+}
+
+.glass-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+}
+
+.neon-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: var(--spacing-md) 0;
+    width: 100%;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes subtlePulse {
+    0% {
+        box-shadow: 0 0 0px var(--color-glow);
+    }
+
+    50% {
+        box-shadow: 0 0 10px var(--color-glow);
+    }
+
+    100% {
+        box-shadow: 0 0 0px var(--color-glow);
+    }
+}
+
+.animate-pulse {
+    animation: subtlePulse 3s infinite ease-in-out;
+}

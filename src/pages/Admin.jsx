@@ -1,0 +1,2214 @@
+import { useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { SiteContext } from '../context/SiteContext';
+import { supabase, uploadStorageFile, compressToWebP } from '../lib/supabase';
+import { useNavigate } from 'react-router-dom';
+import {
+    LayoutDashboard, CalendarDays, Scissors, Users, Settings, LogOut,
+    Plus, Trash2, Save, Pencil, X, Check, Ban, Trophy, Bell, RefreshCw, ChevronDown, User, TrendingUp, Image as ImageIcon, Tag,
+    ChevronLeft, ChevronRight, Maximize2, Sun, Moon, Download, Megaphone, Star
+} from 'lucide-react';
+import * as XLSX from 'xlsx';
+import '../styles/Admin.css';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+const TODAY = new Date().toISOString().split('T')[0];
+
+const STATUS_LABELS = {
+    pending: { label: 'Pendente', color: 'var(--color-primary)' },
+    confirmed: { label: 'Confirmado', color: '#4ade80' },
+    cancelled: { label: 'Cancelado', color: '#ef4444' },
+    finished: { label: 'Finalizado', color: '#a78bfa' },
+};
+
+const StatusBadge = ({ status }) => {
+    const s = STATUS_LABELS[status] || STATUS_LABELS.pending;
+    return (
+        <span style={{
+            padding: '3px 10px', borderRadius: '20px', fontSize: '0.72rem', fontWeight: 700,
+            background: s.color + '22', color: s.color, whiteSpace: 'nowrap'
+        }}>{s.label}</span>
+    );
+};
+
+const StatCard = ({ icon, label, value, color = 'var(--color-primary)' }) => (
+    <div className="admin-stat-card glass-panel">
+        <span style={{ fontSize: '2rem' }}>{icon}</span>
+        <div>
+            <p className="stat-label">{label}</p>
+            <h3 className="stat-value" style={{ color }}>{value}</h3>
+        </div>
+    </div>
+);
+
+const Modal = ({ title, onClose, children }) => (
+    <div className="admin-modal-overlay" onClick={onClose}>
+        <div className="admin-modal glass-panel" onClick={e => e.stopPropagation()}>
+            <div className="admin-modal-header">
+                <h3>{title}</h3>
+                <button onClick={onClose} className="admin-modal-close"><X size={20} /></button>
+            </div>
+            {children}
+        </div>
+    </div>
+);
+
+// ─── TabBar ─────────────────────────────────────────────────────────────────
+const TABS = [
+    { id: 'dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
+    { id: 'appointments', icon: <CalendarDays size={18} />, label: 'Agendamentos' },
+    { id: 'subscriptions', icon: <User size={18} />, label: 'Mensalistas' },
+    { id: 'customers', icon: <Users size={18} />, label: 'Clientes' },
+    { id: 'services', icon: <Scissors size={18} />, label: 'Serviços' },
+    { id: 'planspromos', icon: <Megaphone size={18} />, label: 'Planos & Promoções' },
+    { id: 'artists', icon: <Trophy size={18} />, label: 'Profissionais' },
+    { id: 'categories', icon: <Tag size={18} />, label: 'Categorias' },
+    { id: 'gallery', icon: <ImageIcon size={18} />, label: 'Galeria' },
+    { id: 'finances', icon: <TrendingUp size={18} />, label: 'Financeiro' },
+    { id: 'settings', icon: <Settings size={18} />, label: 'Configurações' },
+];
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN ADMIN COMPONENT
+// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+const Admin = () => {
+    const { siteData, updateSiteData, theme, toggleTheme } = useContext(SiteContext);
+    const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState('dashboard');
+    const [notificationQueue, setNotificationQueue] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [showBellPanel, setShowBellPanel] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    // Navbar scroll state
+    const navRef = useRef(null);
+    const [showLeftScroll, setShowLeftScroll] = useState(false);
+    const [showRightScroll, setShowRightScroll] = useState(true);
+
+    const handleScroll = useCallback(() => {
+        if (!navRef.current) return;
+        const { scrollLeft, scrollWidth, clientWidth } = navRef.current;
+        setShowLeftScroll(scrollLeft > 0);
+        setShowRightScroll(scrollLeft < scrollWidth - clientWidth - 5);
+    }, []);
+
+    useEffect(() => {
+        handleScroll();
+        window.addEventListener('resize', handleScroll);
+        return () => window.removeEventListener('resize', handleScroll);
+    }, [handleScroll]);
+
+    // Supabase Real-time listener for New Appointments AND Subscriptions
+    useEffect(() => {
+        const appointmentChannel = supabase.channel('public:appointments')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' }, payload => {
+                // Play notification sound
+                try {
+                    const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-30.mp3');
+                    audio.volume = 0.5;
+                    audio.play();
+                } catch (e) { console.warn("Audio autoplay blocked"); }
+
+                // Add to persistent notification queue (accumulates multiple)
+                const id = Date.now();
+                setNotificationQueue(q => [...q, {
+                    id,
+                    type: 'appointment',
+                    title: '🔔 Novo Agendamento!',
+                    message: 'Um novo pedido de agendamento foi recebido. Confira na aba Agendamentos.'
+                }]);
+                setUnreadCount(c => c + 1);
+            })
+            .subscribe();
+
+        const subscriptionChannel = supabase.channel('public:plan_subscriptions')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plan_subscriptions' }, payload => {
+                try {
+                    const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-30.mp3');
+                    audio.volume = 0.5;
+                    audio.play();
+                } catch (e) { console.warn("Audio autoplay blocked"); }
+
+                const id = Date.now();
+                setNotificationQueue(q => [...q, {
+                    id,
+                    type: 'subscription',
+                    title: '⭐ Nova Assinatura de Plano!',
+                    message: 'Um cliente preencheu os dados para assinar um plano. Confira na aba Mensalistas.'
+                }]);
+                setUnreadCount(c => c + 1);
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(appointmentChannel);
+            supabase.removeChannel(subscriptionChannel);
+        };
+    }, []);
+
+    const scrollNav = (direction) => {
+        if (navRef.current) {
+            const scrollAmount = direction === 'left' ? -200 : 200;
+            navRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+        }
+    };
+
+    // Helper: dismiss the current (first) notification in the queue
+    const dismissNotification = () => {
+        setNotificationQueue(q => q.slice(1));
+    };
+
+    // Navigate to respective tab and clear badge
+    const handleNotificationClick = () => {
+        const targetTab = notificationQueue[0]?.type === 'subscription' ? 'subscriptions' : 'appointments';
+        setNotificationQueue([]);
+        setUnreadCount(0);
+        setShowBellPanel(false);
+        handleTabChange(targetTab);
+    };
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        navigate('/login');
+    };
+
+    const handleTabChange = (tabId) => {
+        setActiveTab(tabId);
+        setMobileMenuOpen(false);
+    };
+
+    return (
+        <div className="admin-shell">
+            {/* ── Persistent Notification Popup — shows queue[0], persists until dismissed ── */}
+            {notificationQueue.length > 0 && (
+                <div className="admin-notification-overlay fade-in">
+                    <div className="admin-notification-popup glass-panel scale-in" onClick={e => e.stopPropagation()}>
+                        {notificationQueue.length > 1 && (
+                            <div style={{
+                                position: 'absolute', top: '12px', left: '12px',
+                                background: '#ef4444', color: '#fff', borderRadius: '20px',
+                                fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px'
+                            }}>
+                                {notificationQueue.length} novas notificações
+                            </div>
+                        )}
+                        <div className="notification-icon-large">
+                            <Bell size={40} />
+                        </div>
+                        <h3 className="notification-title">{notificationQueue[0].title}</h3>
+                        <p className="notification-message">{notificationQueue[0].message}</p>
+
+                        <div className="notification-actions">
+                            <button className="admin-btn-secondary" onClick={dismissNotification}>
+                                {notificationQueue.length > 1 ? `Ignorar (${notificationQueue.length - 1} restante${notificationQueue.length > 2 ? 's' : ''})` : 'Ignorar'}
+                            </button>
+                            <button className="admin-btn-primary neon-glow" onClick={handleNotificationClick}>
+                                Ver Detalhes
+                            </button>
+                        </div>
+                        <button className="notification-close-btn" onClick={dismissNotification}>
+                            <X size={20} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Top Bar ── */}
+            <header className="admin-topbar">
+                <div className="admin-topbar-inner">
+                    <div className="admin-topbar-left">
+                        <span className="admin-topbar-title">Painel Admin</span>
+                        <div className="admin-nav-wrapper">
+                            {showLeftScroll && (
+                                <button className="nav-scroll-btn left" onClick={() => scrollNav('left')}>
+                                    <ChevronLeft size={18} />
+                                </button>
+                            )}
+                            <div className={`nav-fade-mask ${showLeftScroll ? 'has-left' : ''} ${showRightScroll ? 'has-right' : ''}`}>
+                                <nav className="admin-desktop-nav" ref={navRef} onScroll={handleScroll}>
+                                    {TABS.map(tab => (
+                                        <button
+                                            key={tab.id}
+                                            className={`nav-link ${activeTab === tab.id ? 'active' : ''}`}
+                                            onClick={() => handleTabChange(tab.id)}
+                                        >
+                                            {tab.icon}
+                                            <span>{tab.label}</span>
+                                        </button>
+                                    ))}
+                                </nav>
+                            </div>
+                            {showRightScroll && (
+                                <button className="nav-scroll-btn right" onClick={() => scrollNav('right')}>
+                                    <ChevronRight size={18} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <div className="admin-topbar-right">
+                        {/* Bell Button with Badge */}
+                        <div style={{ position: 'relative', display: 'inline-flex' }}>
+                            <button
+                                onClick={() => {
+                                    if (unreadCount > 0) handleNotificationClick();
+                                }}
+                                className="theme-toggle-btn"
+                                title={unreadCount > 0 ? `${unreadCount} notificações não lidas` : 'Notificações'}
+                                style={{ marginRight: '4px', position: 'relative' }}
+                            >
+                                <Bell size={20} />
+                                {unreadCount > 0 && (
+                                    <span style={{
+                                        position: 'absolute', top: '-4px', right: '-4px',
+                                        background: '#ef4444', color: '#fff',
+                                        fontSize: '0.6rem', fontWeight: 800,
+                                        padding: '1px 5px', borderRadius: '10px',
+                                        lineHeight: '14px', minWidth: '16px',
+                                        textAlign: 'center', pointerEvents: 'none'
+                                    }}>
+                                        {unreadCount > 9 ? '9+' : unreadCount}
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+                        <button onClick={toggleTheme} className="theme-toggle-btn" title="Alternar Tema" style={{ marginRight: '8px' }}>
+                            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                        </button>
+                        <button className="admin-logout-btn" onClick={handleLogout} title="Sair" style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '8px' }}>
+                            <LogOut size={20} />
+                        </button>
+                        <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+                            {mobileMenuOpen ? <X size={24} /> : <ChevronDown size={24} />}
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            {/* ── Mobile Navigation ── */}
+            <nav className={`mobile-navigation ${mobileMenuOpen ? 'open' : ''}`}>
+                {TABS.map(tab => (
+                    <button
+                        key={tab.id}
+                        className={`nav-link ${activeTab === tab.id ? 'active' : ''}`}
+                        onClick={() => handleTabChange(tab.id)}
+                    >
+                        {tab.icon}
+                        <span>{tab.label}</span>
+                    </button>
+                ))}
+            </nav>
+
+            {/* ── Tab Content ── */}
+            <main className="admin-content">
+                {activeTab === 'dashboard' && <DashboardTab />}
+                {activeTab === 'appointments' && <AppointmentsTab />}
+                {activeTab === 'subscriptions' && <SubscriptionsTab />}
+                {activeTab === 'customers' && <CustomersTab />}
+                {activeTab === 'services' && <ServicesTab siteData={siteData} updateSiteData={updateSiteData} />}
+                {activeTab === 'artists' && <ArtistsTab siteData={siteData} updateSiteData={updateSiteData} />}
+                {activeTab === 'categories' && <CategoriesTab />}
+                {activeTab === 'gallery' && <GalleryTab />}
+                {activeTab === 'finances' && <FinancesTab />}
+                {activeTab === 'settings' && <SettingsTab siteData={siteData} updateSiteData={updateSiteData} />}
+                {activeTab === 'planspromos' && <PlansPromosTab />}
+            </main>
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PLANS & PROMOTIONS TAB
+// ══════════════════════════════════════════════════════════════════════════════
+const PlansPromosTab = () => {
+    const [plans, setPlans] = useState([]);
+    const [promotions, setPromotions] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Plan Modal
+    const [showPlanModal, setShowPlanModal] = useState(false);
+    const [planForm, setPlanForm] = useState({ id: null, title: '', price: 0, period: 'por sessão', features: '', is_popular: false, active: true });
+
+    // Promo Modal
+    const [showPromoModal, setShowPromoModal] = useState(false);
+    const [promoForm, setPromoForm] = useState({ id: null, title: '', description: '', image_url: '', active: true });
+    const [uploading, setUploading] = useState(false);
+
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        const [plansRes, promosRes] = await Promise.all([
+            supabase.from('plans').select('*').order('price'),
+            supabase.from('promotions').select('*').order('created_at', { ascending: false })
+        ]);
+        setPlans(plansRes.data || []);
+        setPromotions(promosRes.data || []);
+        setLoading(false);
+    }, []);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    const openPlan = (plan = null) => {
+        if (plan) {
+            setPlanForm({ ...plan, features: (plan.features || []).join('\n') });
+        } else {
+            setPlanForm({ id: null, title: '', price: 0, period: 'por sessão', features: '', is_popular: false, active: true });
+        }
+        setShowPlanModal(true);
+    };
+
+    const savePlan = async () => {
+        if (!planForm.title) return alert('O título é obrigatório');
+
+        const payload = {
+            title: planForm.title,
+            price: planForm.price,
+            period: planForm.period,
+            features: typeof planForm.features === 'string' ? planForm.features.split('\n').map(s => s.trim()).filter(Boolean) : planForm.features,
+            is_popular: planForm.is_popular,
+            active: planForm.active
+        };
+
+        if (planForm.id) {
+            await supabase.from('plans').update(payload).eq('id', planForm.id);
+        } else {
+            await supabase.from('plans').insert([payload]);
+        }
+        setShowPlanModal(false);
+        fetchData();
+    };
+
+    const deletePlan = async (id) => {
+        if (!confirm('Excluir este plano?')) return;
+        await supabase.from('plans').delete().eq('id', id);
+        fetchData();
+    };
+
+    const openPromo = (promo = null) => {
+        if (promo) {
+            setPromoForm({ ...promo });
+        } else {
+            setPromoForm({ id: null, title: '', description: '', image_url: '', active: true });
+        }
+        setShowPromoModal(true);
+    };
+
+    const handlePromoUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploading(true);
+        try {
+            const optimizedFile = await compressToWebP(file, 5, 0.8);
+            const sanitizedName = optimizedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+            const fileName = `promos/${Date.now()}_${sanitizedName}`;
+            const publicUrl = await uploadStorageFile('uploads', fileName, optimizedFile);
+            setPromoForm(f => ({ ...f, image_url: publicUrl }));
+        } catch (error) {
+            alert(error.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const savePromo = async () => {
+        if (!promoForm.title || !promoForm.description) return alert('Título e descrição são obrigatórios');
+
+        const payload = {
+            title: promoForm.title,
+            description: promoForm.description,
+            image_url: promoForm.image_url,
+            active: promoForm.active
+        };
+
+        if (promoForm.id) {
+            await supabase.from('promotions').update(payload).eq('id', promoForm.id);
+        } else {
+            await supabase.from('promotions').insert([payload]);
+        }
+        setShowPromoModal(false);
+        fetchData();
+    };
+
+    const deletePromo = async (id) => {
+        if (!confirm('Excluir esta promoção?')) return;
+        await supabase.from('promotions').delete().eq('id', id);
+        fetchData();
+    };
+
+    return (
+        <div className="fade-in">
+            {/* Promoções Section */}
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Promoções em Destaque</h2>
+                <button className="admin-add-btn neon-glow" onClick={() => openPromo()}><Plus size={16} /> <span>Nova Promoção</span></button>
+            </div>
+            {loading ? <div className="admin-loading">Carregando...</div> : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+                    {promotions.map(promo => (
+                        <div key={promo.id} className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderLeft: promo.active ? '4px solid #4ade80' : '4px solid #888' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <h3 style={{ fontSize: '1.2rem', marginBottom: '8px' }}>{promo.title}</h3>
+                                    <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', whiteSpace: 'pre-line', marginBottom: '16px' }}>{promo.description}</p>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button className="action-btn edit" onClick={() => openPromo(promo)}><Pencil size={16} /></button>
+                                    <button className="action-btn delete" onClick={() => deletePromo(promo.id)}><Trash2 size={16} /></button>
+                                </div>
+                            </div>
+                            {promo.image_url && <img src={promo.image_url} alt="Promo" style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '8px', marginTop: '10px' }} />}
+                        </div>
+                    ))}
+                    {promotions.length === 0 && <p className="admin-empty">Nenhuma promoção ativa</p>}
+                </div>
+            )}
+
+            {/* Planos Section */}
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Planos de Sessão</h2>
+                <button className="admin-add-btn neon-glow" onClick={() => openPlan()}><Plus size={16} /> <span>Novo Plano</span></button>
+            </div>
+            {loading ? <div className="admin-loading">Carregando...</div> : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+                    {plans.map(plan => (
+                        <div key={plan.id} className="glass-panel" style={{ padding: '20px', borderRadius: '12px', borderLeft: plan.active ? '4px solid var(--color-primary)' : '4px solid #888' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <h3 style={{ fontSize: '1.2rem', marginBottom: '8px' }}>{plan.title}</h3>
+                                        {plan.is_popular && <span style={{ background: 'var(--color-primary)', color: '#000', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>POPULAR</span>}
+                                    </div>
+                                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--color-primary)', marginBottom: '16px' }}>R$ {plan.price} <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 'normal' }}>{plan.period}</span></p>
+                                    <ul style={{ paddingLeft: '20px', fontSize: '0.9rem', color: 'var(--color-text-light)', marginBottom: '16px' }}>
+                                        {(plan.features || []).map((feat, idx) => <li key={idx} style={{ marginBottom: '4px' }}>{feat}</li>)}
+                                    </ul>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button className="action-btn edit" onClick={() => openPlan(plan)}><Pencil size={16} /></button>
+                                    <button className="action-btn delete" onClick={() => deletePlan(plan.id)}><Trash2 size={16} /></button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {plans.length === 0 && <p className="admin-empty">Nenhum plano cadastrado</p>}
+                </div>
+            )}
+
+            {showPlanModal && (
+                <Modal title={planForm.id ? 'Editar Plano' : 'Novo Plano'} onClose={() => setShowPlanModal(false)}>
+                    <div className="admin-form">
+                        <div className="form-group">
+                            <label>Título do Plano *</label>
+                            <input type="text" className="form-input" value={planForm.title} onChange={e => setPlanForm({ ...planForm, title: e.target.value })} />
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <div className="form-group" style={{ flex: 1 }}>
+                                <label>Preço (R$) *</label>
+                                <input type="number" className="form-input" value={planForm.price} onChange={e => setPlanForm({ ...planForm, price: e.target.value })} />
+                            </div>
+                            <div className="form-group" style={{ flex: 1 }}>
+                                <label>Período (Ex: por sessão)</label>
+                                <input type="text" className="form-input" value={planForm.period} onChange={e => setPlanForm({ ...planForm, period: e.target.value })} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label>Itens Inclusos (um por linha)</label>
+                            <textarea className="form-input" rows={4} value={planForm.features} onChange={e => setPlanForm({ ...planForm, features: e.target.value })}></textarea>
+                        </div>
+                        <div className="form-group flex-row-center" style={{ display: 'flex', gap: '20px', marginTop: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input type="checkbox" id="planActive" checked={planForm.active} onChange={e => setPlanForm({ ...planForm, active: e.target.checked })} />
+                                <label htmlFor="planActive" style={{ margin: 0 }}>Ativo</label>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input type="checkbox" id="planPopular" checked={planForm.is_popular} onChange={e => setPlanForm({ ...planForm, is_popular: e.target.checked })} />
+                                <label htmlFor="planPopular" style={{ margin: 0 }}>Mais Popular (Destaque)</label>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                            <button className="admin-btn-secondary" onClick={() => setShowPlanModal(false)}>Cancelar</button>
+                            <button className="admin-btn-primary neon-glow" onClick={savePlan}><Save size={16} /> Salvar</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {showPromoModal && (
+                <Modal title={promoForm.id ? 'Editar Promoção' : 'Nova Promoção'} onClose={() => setShowPromoModal(false)}>
+                    <div className="admin-form">
+                        <div className="form-group">
+                            <label>Título da Promoção *</label>
+                            <input type="text" className="form-input" placeholder="Ex: Flash Tattoo Day" value={promoForm.title} onChange={e => setPromoForm({ ...promoForm, title: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                            <label>Descrição *</label>
+                            <textarea className="form-input" rows={4} placeholder="Detalhes da promoção..." value={promoForm.description} onChange={e => setPromoForm({ ...promoForm, description: e.target.value })}></textarea>
+                        </div>
+                        <div className="form-group">
+                            <label>Imagem de Destaque (Opcional)</label>
+                            {promoForm.image_url ? (
+                                <div style={{ marginBottom: '15px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0 }}>Pré-visualização:</p>
+                                        <button className="admin-btn-secondary" onClick={() => setPromoForm(f => ({ ...f, image_url: '' }))} type="button" style={{ padding: '4px 8px', fontSize: '11px' }}>
+                                            Remover / Trocar
+                                        </button>
+                                    </div>
+                                    <img src={promoForm.image_url} alt="preview" style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '8px' }} />
+                                </div>
+                            ) : (
+                                <input type="file" accept="image/*" onChange={handlePromoUpload} disabled={uploading} className="form-input" />
+                            )}
+                            {uploading && <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '5px' }}>Processando e reduzindo tamanho...</div>}
+                        </div>
+                        <div className="form-group flex-row-center" style={{ display: 'flex', gap: '20px', marginTop: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input type="checkbox" id="promoActive" checked={promoForm.active} onChange={e => setPromoForm({ ...promoForm, active: e.target.checked })} />
+                                <label htmlFor="promoActive" style={{ margin: 0 }}>Ativa (Visível na página principal)</label>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                            <button className="admin-btn-secondary" onClick={() => setShowPromoModal(false)}>Cancelar</button>
+                            <button className="admin-btn-primary neon-glow" onClick={savePromo}><Save size={16} /> Salvar</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DASHBOARD TAB
+
+// ══════════════════════════════════════════════════════════════════════════════
+const DashboardTab = () => {
+    const [stats, setStats] = useState({ todayAppointments: 0, newCustomers: 0, completedSessions: 0, revenue: 0 });
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            setLoading(true);
+            const today = new Date().toISOString().split('T')[0];
+
+            // 1. Agendamentos Hoje
+            const { count: countToday } = await supabase
+                .from('appointments')
+                .select('*', { count: 'exact', head: true })
+                .eq('date', today);
+
+            // 2. Clientes Novos Hoje
+            const { count: countCustomers } = await supabase
+                .from('customers')
+                .select('*', { count: 'exact', head: true })
+                .gte('created_at', today);
+
+            // 3. Sessões Realizadas e Faturamento
+            const { data: completedData } = await supabase
+                .from('appointments')
+                .select('session_price')
+                .eq('date', today)
+                .eq('status', 'finished');
+
+            const revenue = completedData?.reduce((acc, curr) => acc + (parseFloat(curr.session_price) || 0), 0) || 0;
+
+            setStats({
+                todayAppointments: countToday || 0,
+                newCustomers: countCustomers || 0,
+                completedSessions: completedData?.length || 0,
+                revenue
+            });
+            setLoading(false);
+        };
+        fetchStats();
+    }, []);
+
+    if (loading) return <div className="admin-loading">Carregando painel...</div>;
+
+    return (
+        <div className="fade-in">
+            <h2 className="admin-section-title">Painel de Controle</h2>
+            <div className="admin-stats-grid">
+                <div className="admin-stat-card">
+                    <div className="stat-icon-wrapper"><CalendarDays size={24} /></div>
+                    <div>
+                        <p>Agendamentos Hoje</p>
+                        <h3>{stats.todayAppointments}</h3>
+                    </div>
+                </div>
+                <div className="admin-stat-card">
+                    <div className="stat-icon-wrapper" style={{ color: '#4ade80', background: 'rgba(74, 222, 128, 0.1)' }}><Users size={24} /></div>
+                    <div>
+                        <p>Clientes Novos</p>
+                        <h3>{stats.newCustomers}</h3>
+                    </div>
+                </div>
+                <div className="admin-stat-card">
+                    <div className="stat-icon-wrapper" style={{ color: '#A78BFA', background: 'rgba(167, 139, 250, 0.1)' }}><Trophy size={24} /></div>
+                    <div>
+                        <p>Sessões Realizadas</p>
+                        <h3>{stats.completedSessions}</h3>
+                    </div>
+                </div>
+                <div className="admin-stat-card">
+                    <div className="stat-icon-wrapper" style={{ color: '#FF7A00', background: 'rgba(255, 122, 0, 0.1)' }}><TrendingUp size={24} /></div>
+                    <div>
+                        <p>Faturamento Hoje</p>
+                        <h3>R$ {stats.revenue.toFixed(2)}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// APPOINTMENTS TAB
+// ══════════════════════════════════════════════════════════════════════════════
+const AppointmentsTab = () => {
+    const [appointments, setAppointments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [filters, setFilters] = useState({ date: '', status: '', service: '' });
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [bulkAction, setBulkAction] = useState('');
+
+    const fetchAppointments = useCallback(async () => {
+        setLoading(true);
+        let query = supabase.from('appointments').select(`
+            *,
+            customers (name, phone),
+            services (name),
+            artists (name)
+        `).order('created_at', { ascending: false });
+        if (filters.date) query = query.eq('date', filters.date);
+        if (filters.status) query = query.eq('status', filters.status);
+        // Note: Filter by service_name removed as the column is now handled via relational join
+        // We could filter by service_id if needed, but for now we skip the text filter or use ilike on the join if possible.
+        const { data } = await query;
+        setAppointments(data || []);
+        setSelectedIds([]);
+        setLoading(false);
+    }, [filters]);
+
+    useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
+
+    const updateStatus = async (id, status) => {
+        await supabase.from('appointments').update({ status }).eq('id', id);
+        setAppointments(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+    };
+
+    const deleteAppointment = async (id) => {
+        if (!confirm('Excluir este agendamento?')) return;
+        await supabase.from('appointments').delete().eq('id', id);
+        setAppointments(prev => prev.filter(a => a.id !== id));
+        setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+    };
+
+    const toggleSelectAll = (e) => {
+        if (e.target.checked) setSelectedIds(appointments.map(a => a.id));
+        else setSelectedIds([]);
+    };
+
+    const toggleSelectOne = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const handleBulkAction = async () => {
+        if (!bulkAction || selectedIds.length === 0) return;
+
+        if (bulkAction === 'delete') {
+            if (!confirm(`Tem certeza que deseja excluir ${selectedIds.length} agendamento(s)?`)) return;
+            await supabase.from('appointments').delete().in('id', selectedIds);
+            setAppointments(prev => prev.filter(a => !selectedIds.includes(a.id)));
+        } else {
+            // It's a status update
+            if (!confirm(`Tem certeza que deseja alterar o status de ${selectedIds.length} agendamento(s) para '${bulkAction}'?`)) return;
+            await supabase.from('appointments').update({ status: bulkAction }).in('id', selectedIds);
+            setAppointments(prev => prev.map(a => selectedIds.includes(a.id) ? { ...a, status: bulkAction } : a));
+        }
+
+        setSelectedIds([]);
+        setBulkAction('');
+    };
+
+    return (
+        <div className="fade-in">
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Agendamentos</h2>
+                <button className="admin-refresh-btn" onClick={fetchAppointments}><RefreshCw size={16} /> Atualizar</button>
+            </div>
+
+            {/* Filters */}
+            <div className="admin-filters glass-panel">
+                <input type="date" className="admin-filter-input" value={filters.date}
+                    onChange={e => setFilters(f => ({ ...f, date: e.target.value }))} />
+                <select className="admin-filter-input" value={filters.status}
+                    onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
+                    <option value="">Todos os status</option>
+                    <option value="pending">Pendente</option>
+                    <option value="confirmed">Confirmado</option>
+                    <option value="finished">Finalizado</option>
+                    <option value="cancelled">Cancelado</option>
+                </select>
+                <input type="text" className="admin-filter-input" placeholder="Filtrar por serviço..."
+                    value={filters.service} onChange={e => setFilters(f => ({ ...f, service: e.target.value }))} />
+                {(filters.date || filters.status || filters.service) && (
+                    <button className="admin-clear-btn" onClick={() => setFilters({ date: '', status: '', service: '' })}>
+                        <X size={14} /> Limpar
+                    </button>
+                )}
+            </div>
+
+            {/* Bulk Actions Bar */}
+            {selectedIds.length > 0 && (
+                <div className="admin-bulk-actions glass-panel">
+                    <span style={{ fontWeight: 'bold' }}>{selectedIds.length} selecionado(s)</span>
+                    <select className="form-input" style={{ width: 'auto', padding: '8px', flex: 1, maxWidth: '250px' }} value={bulkAction} onChange={e => setBulkAction(e.target.value)}>
+                        <option value="">Ações em massa...</option>
+                        <option value="pending">Marcar como Pendente</option>
+                        <option value="confirmed">Marcar como Confirmado</option>
+                        <option value="finished">Marcar como Finalizado</option>
+                        <option value="cancelled">Marcar como Cancelado</option>
+                        <option value="delete">Excluir Selecionados</option>
+                    </select>
+                    <button className="admin-btn-primary" style={{ padding: '8px 16px' }} onClick={handleBulkAction} disabled={!bulkAction}>Aplicar</button>
+                    <button className="admin-btn-secondary" style={{ padding: '8px 16px', marginLeft: 'auto' }} onClick={() => setSelectedIds([])}><X size={14} /> Limpar</button>
+                </div>
+            )}
+
+            {loading ? (
+                <div className="admin-loading">Carregando agendamentos...</div>
+            ) : appointments.length === 0 ? (
+                <div className="admin-empty">Nenhum agendamento encontrado.</div>
+            ) : (
+                <div className="admin-table-wrap">
+                    <table className="admin-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '50px', textAlign: 'center' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedIds.length === appointments.length && appointments.length > 0}
+                                        onChange={toggleSelectAll}
+                                        style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                    />
+                                </th>
+                                <th>Data / Hora</th>
+                                <th>Cliente / Contato</th>
+                                <th>Serviço e Valores (Sinal)</th>
+                                <th>Profissional</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {appointments.map(app => (
+                                <tr key={app.id} style={selectedIds.includes(app.id) ? { backgroundColor: 'var(--color-glow)' } : {}}>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.includes(app.id)}
+                                            onChange={() => toggleSelectOne(app.id)}
+                                            style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                        />
+                                    </td>
+                                    <td>
+                                        <strong>{app.date?.split('-').reverse().join('/')}</strong>
+                                        <br /><span className="table-muted">{app.time}</span>
+                                    </td>
+                                    <td>
+                                        <strong>{app.customers?.name || 'Cliente'}</strong>
+                                        <br /><span className="table-muted">{app.customers?.phone || '-'}</span>
+                                    </td>
+                                    <td>
+                                        <strong>{app.services?.name || 'Serviço'}</strong>
+                                        <br /><span className="table-muted">Total: R$ {parseFloat(app.session_price || 0).toFixed(2)}</span>
+                                        {app.deposit_price > 0 && (
+                                            <div style={{ fontSize: '0.8rem', marginTop: '4px', color: app.deposit_status === 'paid' ? '#4ade80' : '#facc15' }}>
+                                                Sinal: R$ {parseFloat(app.deposit_price).toFixed(2)} ({app.deposit_status === 'paid' ? 'Pago' : 'Pendente'})
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td>{app.artists?.name || '-'}</td>
+                                    <td><StatusBadge status={app.status} /></td>
+                                    <td>
+                                        <div className="table-actions">
+                                            <button className="action-btn confirm" title="Confirmar" onClick={() => updateStatus(app.id, 'confirmed')}><Check size={14} /></button>
+                                            <button className="action-btn finish" title="Finalizar" onClick={() => updateStatus(app.id, 'finished')}><Trophy size={14} /></button>
+                                            <button className="action-btn cancel" title="Cancelar" onClick={() => updateStatus(app.id, 'cancelled')}><Ban size={14} /></button>
+                                            <button className="action-btn delete" title="Excluir" onClick={() => deleteAppointment(app.id)}><Trash2 size={14} /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SUBSCRIPTIONS (MENSALISTAS) TAB
+// ══════════════════════════════════════════════════════════════════════════════
+const SubscriptionsTab = () => {
+    const [subscriptions, setSubscriptions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [selectedSub, setSelectedSub] = useState(null);
+
+    const fetchSubscriptions = async () => {
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('plan_subscriptions')
+            .select(`
+                *,
+                customer:customers(name, phone),
+                plan:plans(title, price, period)
+            `)
+            .order('created_at', { ascending: false });
+
+        if (!error && data) {
+            setSubscriptions(data);
+        }
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        fetchSubscriptions();
+    }, []);
+
+    const handleEdit = (sub) => {
+        setSelectedSub(sub);
+        setIsEditModalOpen(true);
+    };
+
+    const handleSaveEdit = async (e) => {
+        e.preventDefault();
+        const { error } = await supabase
+            .from('plan_subscriptions')
+            .update({ status: selectedSub.status, notes: selectedSub.notes })
+            .eq('id', selectedSub.id);
+
+        if (!error) {
+            setSubscriptions(prev => prev.map(s => s.id === selectedSub.id ? selectedSub : s));
+            setIsEditModalOpen(false);
+        } else {
+            alert('Erro ao salvar assinante.');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Tem certeza que deseja excluir esta assinatura?')) return;
+        await supabase.from('plan_subscriptions').delete().eq('id', id);
+        setSubscriptions(prev => prev.filter(s => s.id !== id));
+    };
+
+    return (
+        <div className="fade-in">
+            <div className="admin-section-header">
+                <div>
+                    <h2 className="admin-section-title">Mensalistas</h2>
+                    <p style={{ color: '#888', fontSize: '0.9rem' }}>Gerencie clientes que assinaram planos recorrentes ou pacotes de sessões.</p>
+                </div>
+                <button className="admin-refresh-btn" onClick={fetchSubscriptions}><RefreshCw size={16} /> Atualizar</button>
+            </div>
+
+            {loading ? <p>Carregando assinantes...</p> : (
+                <div className="admin-card glass-panel" style={{ overflowX: 'auto' }}>
+                    <table className="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Cliente</th>
+                                <th>Plano</th>
+                                <th>Status</th>
+                                <th>Anotações</th>
+                                <th style={{ textAlign: 'right' }}>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {subscriptions.length === 0 ? (
+                                <tr>
+                                    <td colSpan="6" style={{ textAlign: 'center', padding: '40px' }}>Nenhuma assinatura registrada.</td>
+                                </tr>
+                            ) : subscriptions.map(sub => (
+                                <tr key={sub.id}>
+                                    <td>
+                                        <div>{new Date(sub.created_at).toLocaleDateString('pt-BR')}</div>
+                                        <div style={{ fontSize: '0.8rem', color: '#888' }}>{new Date(sub.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                                    </td>
+                                    <td>
+                                        <strong>{sub.customer?.name || 'Cliente Removido'}</strong>
+                                        <div style={{ fontSize: '0.8rem', color: '#888' }}>{sub.customer?.phone}</div>
+                                    </td>
+                                    <td>
+                                        <strong>{sub.plan?.title || 'Plano Removido'}</strong>
+                                        <div style={{ fontSize: '0.8rem', color: '#888' }}>R$ {sub.plan?.price} / {sub.plan?.period}</div>
+                                    </td>
+                                    <td><StatusBadge status={sub.status} /></td>
+                                    <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#888' }}>
+                                        {sub.notes || '-'}
+                                    </td>
+                                    <td style={{ textAlign: 'right' }}>
+                                        <button className="admin-action-btn" onClick={() => handleEdit(sub)} title="Editar"><Pencil size={16} /></button>
+                                        <button className="admin-action-btn delete" onClick={() => handleDelete(sub.id)} title="Excluir"><Trash2 size={16} /></button>
+                                        {sub.customer?.phone && (
+                                            <button className="admin-action-btn bg-green-900/40 text-green-400 hover:bg-green-800/60" title="WhatsApp" onClick={() => {
+                                                const cleanPhone = sub.customer.phone.replace(/\D/g, '');
+                                                window.open(`https://wa.me/55${cleanPhone}`, '_blank');
+                                            }}>Wpp</button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {isEditModalOpen && (
+                <Modal title={`Editar Assinatura - ${selectedSub?.customer?.name}`} onClose={() => setIsEditModalOpen(false)}>
+                    <form onSubmit={handleSaveEdit}>
+                        <div className="admin-form-group">
+                            <label>Status do Plano</label>
+                            <select
+                                className="admin-input"
+                                value={selectedSub.status}
+                                onChange={e => setSelectedSub({ ...selectedSub, status: e.target.value })}
+                            >
+                                <option value="pending">Pendente</option>
+                                <option value="active">Ativo (Em andamento)</option>
+                                <option value="completed">Concluído</option>
+                                <option value="cancelled">Cancelado</option>
+                            </select>
+                        </div>
+                        <div className="admin-form-group">
+                            <label>Controle e Anotações Gerais</label>
+                            <textarea
+                                className="admin-input"
+                                rows="5"
+                                placeholder="Ex: Cliente fechou pacote de 10h. Hoje fez 4h. Restam 6h. Braço esquerdo."
+                                value={selectedSub.notes || ''}
+                                onChange={e => setSelectedSub({ ...selectedSub, notes: e.target.value })}
+                            />
+                            <small style={{ color: '#888', display: 'block', marginTop: '4px' }}>
+                                Use este campo para registrar consumo de horas do plano, observações de projeto, etc.
+                            </small>
+                        </div>
+                        <button type="submit" className="admin-btn-primary" style={{ width: '100%', marginTop: '16px' }}>Salvar Alterações</button>
+                    </form>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CUSTOMERS TAB (CRM)
+// ══════════════════════════════════════════════════════════════════════════════
+const CustomersTab = () => {
+    const [customers, setCustomers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [selectedCustomer, setSelectedCustomer] = useState(null);
+    const [customerHistory, setCustomerHistory] = useState([]);
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [bulkAction, setBulkAction] = useState('');
+
+    // For add/edit modal
+    const [showModal, setShowModal] = useState(false);
+    const [editing, setEditing] = useState(false);
+    const [form, setForm] = useState({ name: '', phone: '', email: '', instagram: '', birthday: '', observations: '' });
+
+    const fetchCustomers = useCallback(async () => {
+        setLoading(true);
+        let query = supabase.from('customers').select('*').order('name', { ascending: true });
+        if (search) query = query.ilike('name', `% ${search}% `);
+        const { data } = await query;
+        setCustomers(data || []);
+        setSelectedIds([]);
+        setLoading(false);
+    }, [search]);
+
+    useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+
+    const viewHistory = async (customer) => {
+        setSelectedCustomer(customer);
+        const { data } = await supabase.from('appointments').select('*')
+            .eq('customer_id', customer.id).order('date', { ascending: false });
+        setCustomerHistory(data || []);
+    };
+
+    const openNew = () => {
+        setEditing(false);
+        setForm({ name: '', phone: '', email: '', instagram: '', birthday: '', observations: '' });
+        setShowModal(true);
+    };
+
+    const openEdit = (customer) => {
+        setEditing(true);
+        setForm(customer);
+        setShowModal(true);
+    };
+
+    const save = async () => {
+        if (!form.name) return alert('Nome é obrigatório');
+        if (editing) {
+            await supabase.from('customers').update(form).eq('id', form.id);
+        } else {
+            await supabase.from('customers').insert([form]);
+        }
+        setShowModal(false);
+        fetchCustomers();
+    };
+
+    const remove = async (id) => {
+        if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+        await supabase.from('customers').delete().eq('id', id);
+        setCustomers(prev => prev.filter(c => c.id !== id));
+        setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+    };
+
+    const toggleSelectAll = (e) => {
+        if (e.target.checked) setSelectedIds(customers.map(c => c.id));
+        else setSelectedIds([]);
+    };
+
+    const toggleSelectOne = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const handleBulkAction = async () => {
+        if (!bulkAction || selectedIds.length === 0) return;
+
+        if (bulkAction === 'delete') {
+            if (!confirm(`ATENÇÃO: Excluir um cliente pode excluir ou quebrar seus agendamentos.\n\nTem certeza que deseja excluir ${selectedIds.length} cliente(s)?`)) return;
+            await supabase.from('customers').delete().in('id', selectedIds);
+            setCustomers(prev => prev.filter(c => !selectedIds.includes(c.id)));
+        }
+
+        setSelectedIds([]);
+        setBulkAction('');
+    };
+
+    return (
+        <div className="fade-in">
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Clientes (CRM)</h2>
+                <button className="admin-add-btn neon-glow" onClick={openNew}><Plus size={16} /> <span>Adicionar Cliente</span></button>
+            </div>
+
+            <div className="admin-filters glass-panel">
+                <input type="text" className="admin-filter-input" placeholder="Buscar por nome..."
+                    value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
+                <button className="admin-refresh-btn" onClick={fetchCustomers}><RefreshCw size={16} /></button>
+            </div>
+
+            {/* Bulk Actions Bar */}
+            {selectedIds.length > 0 && (
+                <div className="admin-bulk-actions glass-panel">
+                    <span style={{ fontWeight: 'bold' }}>{selectedIds.length} selecionado(s)</span>
+                    <select className="form-input" style={{ width: 'auto', padding: '8px', flex: 1, maxWidth: '250px' }} value={bulkAction} onChange={e => setBulkAction(e.target.value)}>
+                        <option value="">Escolha uma ação...</option>
+                        <option value="delete">Excluir Selecionados</option>
+                    </select>
+                    <button className="admin-btn-primary" style={{ padding: '8px 16px' }} onClick={handleBulkAction} disabled={!bulkAction}>Aplicar</button>
+                    <button className="admin-btn-secondary" style={{ padding: '8px 16px', marginLeft: 'auto' }} onClick={() => setSelectedIds([])}><X size={14} /> Limpar Seleção</button>
+                </div>
+            )}
+
+            {loading ? <div className="admin-loading">Carregando clientes...</div> : customers.length === 0 ? <div className="admin-empty">Nenhum cliente cadastrado.</div> : (
+                <div className="admin-table-wrap">
+                    <table className="admin-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '50px', textAlign: 'center' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedIds.length === customers.length && customers.length > 0}
+                                        onChange={toggleSelectAll}
+                                        style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                    />
+                                </th>
+                                <th>Nome</th>
+                                <th>Telefone</th>
+                                <th>Instagram</th>
+                                <th>Nascimento</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {customers.map(c => (
+                                <tr key={c.id} style={selectedIds.includes(c.id) ? { backgroundColor: 'var(--color-glow)' } : {}}>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.includes(c.id)}
+                                            onChange={() => toggleSelectOne(c.id)}
+                                            style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                        />
+                                    </td>
+                                    <td style={{ fontWeight: 'bold' }}>{c.name}</td>
+                                    <td>{c.phone || '-'}</td>
+                                    <td>{c.instagram || '-'}</td>
+                                    <td>{c.birthday ? c.birthday.split('-').reverse().join('/') : '-'}</td>
+                                    <td>
+                                        <div className="table-actions">
+                                            <button className="action-btn" title="Ver Histórico" onClick={() => viewHistory(c)} style={{ color: 'var(--color-primary)' }}><CalendarDays size={16} /></button>
+                                            <button className="action-btn edit" onClick={() => openEdit(c)}><Pencil size={16} /></button>
+                                            <button className="action-btn delete" onClick={() => remove(c.id)}><Trash2 size={16} /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {showModal && (
+                <Modal title={editing ? 'Editar Cliente' : 'Novo Cliente'} onClose={() => setShowModal(false)}>
+                    <div className="admin-form">
+                        <div className="form-group"><label>Nome</label><input className="form-input" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+                        <div className="form-group"><label>Telefone</label><input className="form-input" value={form.phone || ''} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
+                        <div className="form-group"><label>Email</label><input className="form-input" value={form.email || ''} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
+                        <div className="form-group"><label>Instagram (sem @)</label><input className="form-input" value={form.instagram || ''} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} /></div>
+                        <div className="form-group"><label>Data Nascimento</label><input type="date" className="form-input" value={form.birthday || ''} onChange={e => setForm(f => ({ ...f, birthday: e.target.value }))} /></div>
+                        <div className="form-group"><label>Observações (ex: alergias, etc)</label><textarea className="form-input" value={form.observations || ''} onChange={e => setForm(f => ({ ...f, observations: e.target.value }))} rows="3" /></div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: 15 }}><button className="admin-btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button><button className="admin-btn-primary neon-glow" onClick={save}><Save size={16} /> Salvar</button></div>
+                    </div>
+                </Modal>
+            )}
+
+            {selectedCustomer && (
+                <Modal title={`Histórico: ${selectedCustomer.name} `} onClose={() => setSelectedCustomer(null)}>
+                    <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '5px' }}>
+                        {selectedCustomer.observations && (
+                            <div className="glass-panel" style={{ padding: 15, marginBottom: 20, borderRadius: 8, borderLeft: '3px solid var(--color-primary)' }}>
+                                <strong>Observações do Cliente:</strong><br />
+                                {selectedCustomer.observations}
+                            </div>
+                        )}
+                        <h4 style={{ marginBottom: 15 }}>Sessões</h4>
+                        {customerHistory.length === 0 ? <p className="text-muted">Nenhum agendamento encontrado para este cliente.</p> : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {customerHistory.map(h => (
+                                    <div key={h.id} className="glass-panel" style={{ padding: 15, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <p style={{ fontWeight: 'bold', color: 'var(--color-primary)' }}>{h.service_name || 'Serviço'}</p>
+                                            <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{h.date.split('-').reverse().join('/')}</p>
+                                            <p style={{ fontSize: '0.9rem', marginTop: 5 }}><StatusBadge status={h.status} /></p>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <p style={{ fontWeight: 'bold' }}>R$ {parseFloat(h.session_price || 0).toFixed(2)}</p>
+                                            {h.deposit_price > 0 && <p style={{ fontSize: '0.8rem', color: h.deposit_status === 'paid' ? '#4ade80' : 'var(--color-primary)' }}>Sinal: R$ {parseFloat(h.deposit_price).toFixed(2)}</p>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SERVICES TAB (CRUD)
+// ══════════════════════════════════════════════════════════════════════════════
+const ServicesTab = () => {
+    const [services, setServices] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const [form, setForm] = useState({ name: '', description: '', price: '', duration_mins: '', is_featured: false });
+
+    const fetchServices = useCallback(async () => {
+        setLoading(true);
+        const { data } = await supabase.from('services').select('*').order('name');
+        setServices(data || []);
+        setLoading(false);
+    }, []);
+
+    useEffect(() => { fetchServices(); }, [fetchServices]);
+
+    const openNew = () => { setEditing(null); setForm({ name: '', description: '', price: '', duration_mins: '', is_featured: false }); setShowModal(true); };
+    const openEdit = (s) => { setEditing(s); setForm({ name: s.name, description: s.description || '', price: s.price || '', duration_mins: s.duration_mins || '', is_featured: s.is_featured || false }); setShowModal(true); };
+
+    const save = async () => {
+        if (!form.name) return alert('Nome é obrigatório');
+        const payload = { ...form, price: parseFloat(form.price) || 0, duration_mins: parseInt(form.duration_mins) || 60 };
+        if (editing) {
+            await supabase.from('services').update(payload).eq('id', editing.id);
+        } else {
+            await supabase.from('services').insert([payload]);
+        }
+        setShowModal(false);
+        fetchServices();
+    };
+
+    const remove = async (id) => {
+        if (!confirm('Excluir este serviço?')) return;
+        await supabase.from('services').delete().eq('id', id);
+        fetchServices();
+    };
+
+    return (
+        <div className="fade-in">
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Serviços</h2>
+                <button className="admin-add-btn neon-glow" onClick={openNew}><Plus size={16} /> <span>Novo Serviço</span></button>
+            </div>
+
+            {loading ? <div className="admin-loading">Carregando serviços...</div> : (
+                <div className="admin-cards-grid">
+                    {services.map(s => (
+                        <div key={s.id} className="admin-card glass-panel" style={s.is_featured ? { border: '1px solid var(--color-primary)' } : {}}>
+                            <div className="admin-card-body">
+                                <h4 className="admin-card-title">{s.name}</h4>
+                                <p className="admin-card-desc">{s.description}</p>
+                                <div className="admin-card-meta">
+                                    <span>⏱ {s.duration_mins} min</span>
+                                    <span className="admin-price">R$ {parseFloat(s.price).toFixed(2)}</span>
+                                </div>
+                                {s.is_featured && <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Destaque</span>}
+                            </div>
+                            <div className="admin-card-actions">
+                                <button className="action-btn edit" onClick={() => openEdit(s)}><Pencil size={14} /></button>
+                                <button className="action-btn delete" onClick={() => remove(s.id)}><Trash2 size={14} /></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {showModal && (
+                <Modal title={editing ? 'Editar Serviço' : 'Novo Serviço'} onClose={() => setShowModal(false)}>
+                    <div className="admin-form">
+                        <div className="form-group">
+                            <label>Nome do serviço</label>
+                            <input className="form-input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                        </div>
+                        <div className="form-group">
+                            <label>Descrição</label>
+                            <input className="form-input" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div className="form-group">
+                                <label>Preço Base (R$)</label>
+                                <input className="form-input" type="number" step="0.01" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
+                            </div>
+                            <div className="form-group">
+                                <label>Duração (minutos)</label>
+                                <input className="form-input" type="number" value={form.duration_mins} placeholder="ex: 120" onChange={e => setForm(f => ({ ...f, duration_mins: e.target.value }))} />
+                            </div>
+                        </div>
+                        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input type="checkbox" id="is_featured" checked={form.is_featured} onChange={e => setForm(f => ({ ...f, is_featured: e.target.checked }))} style={{ accentColor: 'var(--color-primary)' }} />
+                            <label htmlFor="is_featured" style={{ margin: 0 }}>Serviço Destaque (Mais Pedido)</label>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                            <button className="admin-btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                            <button className="admin-btn-primary neon-glow" onClick={save}><Save size={16} /> Salvar</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ARTISTS TAB (CRUD)
+// ══════════════════════════════════════════════════════════════════════════════
+const ArtistsTab = () => {
+    const [artists, setArtists] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const [form, setForm] = useState({ name: '', photo_url: '', instagram: '', specialty: '', active: true });
+    const [uploading, setUploading] = useState(false);
+
+    const fetchArtists = useCallback(async () => {
+        setLoading(true);
+        const { data } = await supabase.from('artists').select('*').order('name');
+        setArtists(data || []);
+        setLoading(false);
+    }, []);
+
+    useEffect(() => { fetchArtists(); }, [fetchArtists]);
+
+    const openNew = () => { setEditing(null); setForm({ name: '', photo_url: '', instagram: '', specialty: '', active: true }); setShowModal(true); };
+    const openEdit = (a) => { setEditing(a); setForm({ name: a.name, photo_url: a.photo_url || '', instagram: a.instagram || '', specialty: a.specialty || '', active: a.active ?? true }); setShowModal(true); };
+
+    const save = async () => {
+        if (!form.name) return alert('Nome é obrigatório');
+
+        const { error } = editing
+            ? await supabase.from('artists').update(form).eq('id', editing.id)
+            : await supabase.from('artists').insert([form]);
+
+        if (error) {
+            console.error('Error saving artist:', error);
+            return alert('Erro ao salvar no banco de dados: ' + error.message);
+        }
+
+        setShowModal(false);
+        fetchArtists();
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploading(true);
+        try {
+            // Optimize image via WebP before uploading
+            const optimizedFile = await compressToWebP(file, 5, 0.8);
+            const sanitizedName = optimizedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+            const fileName = `artists/${Date.now()}_${sanitizedName}`;
+            const publicUrl = await uploadStorageFile('uploads', fileName, optimizedFile);
+            setForm(f => ({ ...f, photo_url: publicUrl }));
+        } catch (error) {
+            console.error('Error uploading:', error);
+            alert(error.message || 'Erro ao processar/upload da imagem.');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const remove = async (id) => {
+        if (!confirm('Excluir este profissional? (Desativar pode ser melhor para manter o histórico).')) return;
+        await supabase.from('artists').delete().eq('id', id);
+        fetchArtists();
+    };
+
+    const toggleActive = async (artist) => {
+        const newStatus = !artist.active;
+        await supabase.from('artists').update({ active: newStatus }).eq('id', artist.id);
+        fetchArtists();
+    };
+
+    return (
+        <div className="fade-in">
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Profissionais</h2>
+                <button className="admin-add-btn" onClick={openNew}>
+                    <Plus size={18} />
+                    <span>Novo Profissional</span>
+                </button>
+            </div>
+
+            {loading ? <div className="admin-loading">Carregando profissionais...</div> : (
+                <div className="admin-artists-grid">
+                    {artists.map(a => (
+                        <div key={a.id} className="admin-artist-card" style={!a.active ? { opacity: 0.6 } : {}}>
+                            <img
+                                src={a.photo_url || 'https://via.placeholder.com/150?text=Artist'}
+                                alt={a.name}
+                                className="artist-avatar"
+                            />
+                            <div className="artist-name">{a.name} {!a.active && '(Inativo)'}</div>
+                            <div className="artist-specialty">{a.specialty || 'Tatuador'}</div>
+                            <div className="artist-instagram">{a.instagram ? `@${a.instagram} ` : '-'}</div>
+
+                            <div className="card-actions-row">
+                                <button className="btn-card btn-edit" title="Editar" onClick={() => openEdit(a)}>
+                                    <Pencil size={14} />
+                                </button>
+                                <button
+                                    className="btn-card btn-toggle"
+                                    title={a.active ? "Desativar" : "Ativar"}
+                                    onClick={() => toggleActive(a)}
+                                >
+                                    <Ban size={14} />
+                                </button>
+                                <button className="btn-card btn-delete" title="Excluir" onClick={() => remove(a.id)}>
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {showModal && (
+                <Modal title={editing ? 'Editar Profissional' : 'Novo Profissional'} onClose={() => setShowModal(false)}>
+                    <div className="admin-form">
+                        <div className="form-group">
+                            <label>Nome</label>
+                            <input className="form-input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                        </div>
+                        <div className="form-group">
+                            <label>Especialidade</label>
+                            <input className="form-input" value={form.specialty} placeholder="ex: Tatuagem realista" onChange={e => setForm(f => ({ ...f, specialty: e.target.value }))} />
+                        </div>
+                        <div className="form-group">
+                            <label>Instagram (sem @)</label>
+                            <input className="form-input" value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} />
+                        </div>
+                        <div className="form-group">
+                            <label>Foto do Profissional</label>
+                            {form.photo_url ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px' }}>
+                                    <img src={form.photo_url} alt="preview" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover' }} />
+                                    <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, photo_url: '' }))} type="button" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                                        Remover / Trocar
+                                    </button>
+                                </div>
+                            ) : (
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleFileUpload}
+                                    disabled={uploading}
+                                    className="form-input"
+                                />
+                            )}
+                            {uploading && <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '5px' }}>Enviando imagem...</div>}
+                        </div>
+
+                        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input type="checkbox" id="active" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} style={{ accentColor: 'var(--color-primary)' }} />
+                            <label htmlFor="active" style={{ margin: 0 }}>Profissional Ativo (Aparece no Agendamento)</label>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                            <button className="admin-btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                            <button className="admin-btn-primary neon-glow" onClick={save}><Save size={16} /> Salvar</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SETTINGS TAB
+// ══════════════════════════════════════════════════════════════════════════════
+const SettingsField = ({ label, field, type = 'text', placeholder, form, setForm }) => (
+    <div className="form-group">
+        <label>{label}</label>
+        <input className="form-input" type={type} value={form[field] || ''} placeholder={placeholder}
+            onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))} />
+    </div>
+);
+
+const SettingsTimeField = ({ labelPrefix, prefixKey, form, setForm }) => (
+    <div style={{ marginBottom: 15 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '10px' }}>
+            <SettingsField label={`Rótulo(${labelPrefix})`} field={`${prefixKey} Label`} form={form} setForm={setForm} />
+            <SettingsField label="Abre (HH:MM)" field={`${prefixKey} Open`} placeholder="09:00" form={form} setForm={setForm} />
+            <SettingsField label="Fecha (HH:MM)" field={`${prefixKey} Close`} placeholder="19:00" form={form} setForm={setForm} />
+        </div>
+    </div>
+);
+
+const SettingsTab = () => {
+    const [form, setForm] = useState({
+        phone: '',
+        whatsapp: '',
+        instagram: '',
+        address: '',
+        logoUrl: '',
+        bannerUrl: '',
+        menuTitle: '',
+        heroTitle: '',
+        heroSubtitle: '',
+        weekdaysLabel: 'Segunda a Sexta',
+        weekdaysOpen: '09:00',
+        weekdaysClose: '19:00',
+        saturdaysLabel: 'Sábados',
+        saturdaysOpen: '09:00',
+        saturdaysClose: '15:00',
+        sundaysLabel: 'Domingos',
+        sundaysOpen: '',
+        sundaysClose: '',
+    });
+    const [saved, setSaved] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState({ logo: false, banner: false });
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            const { data } = await supabase.from('settings').select('*');
+            if (data) {
+                const contact = data.find(s => s.key_name === 'contact')?.value || {};
+                const hours = data.find(s => s.key_name === 'operating_hours')?.value || {};
+                const branding = data.find(s => s.key_name === 'branding')?.value || {};
+
+                setForm(f => ({
+                    ...f,
+                    phone: contact.phone || '',
+                    whatsapp: contact.whatsapp || '',
+                    instagram: contact.instagram || '',
+                    address: contact.address || '',
+                    logoUrl: branding.logoUrl || '',
+                    bannerUrl: branding.bannerUrl || '',
+                    menuTitle: branding.menuTitle || '',
+                    heroTitle: branding.heroTitle || '',
+                    heroSubtitle: branding.heroSubtitle || '',
+                    weekdaysLabel: hours.weekdays?.label || 'Segunda a Sexta',
+                    weekdaysOpen: hours.weekdays?.open || '',
+                    weekdaysClose: hours.weekdays?.close || '',
+                    saturdaysLabel: hours.saturdays?.label || 'Sábados',
+                    saturdaysOpen: hours.saturdays?.open || '',
+                    saturdaysClose: hours.saturdays?.close || '',
+                    sundaysLabel: hours.sundays?.label || 'Domingos',
+                    sundaysOpen: hours.sundays?.open || '',
+                    sundaysClose: hours.sundays?.close || '',
+                }));
+            }
+            setLoading(false);
+        };
+        fetchSettings();
+    }, []);
+
+    const save = async () => {
+        const contactPayload = { phone: form.phone, whatsapp: form.whatsapp, instagram: form.instagram, address: form.address };
+        const hoursPayload = {
+            weekdays: { label: form.weekdaysLabel, open: form.weekdaysOpen, close: form.weekdaysClose },
+            saturdays: { label: form.saturdaysLabel, open: form.saturdaysOpen, close: form.saturdaysClose },
+            sundays: { label: form.sundaysLabel, open: form.sundaysOpen, close: form.sundaysClose }
+        };
+        const brandingPayload = {
+            logoUrl: form.logoUrl,
+            bannerUrl: form.bannerUrl,
+            menuTitle: form.menuTitle,
+            heroTitle: form.heroTitle,
+            heroSubtitle: form.heroSubtitle
+        };
+
+        const { error } = await supabase.from('settings').upsert([
+            { key_name: 'contact', value: contactPayload },
+            { key_name: 'operating_hours', value: hoursPayload },
+            { key_name: 'branding', value: brandingPayload }
+        ], { onConflict: 'key_name' });
+
+        if (error) {
+            console.error('Error saving settings:', error);
+            return alert('Erro ao salvar configurações: ' + error.message);
+        }
+
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+    };
+
+    const handleFileUpload = async (e, field) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploading(prev => ({ ...prev, [field]: true }));
+        try {
+            const optimizedFile = await compressToWebP(file, 5, 0.8);
+            const sanitizedName = optimizedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+            const fileName = `brand/${field}_${Date.now()}_${sanitizedName}`;
+            const publicUrl = await uploadStorageFile('uploads', fileName, optimizedFile);
+            setForm(f => ({ ...f, [`${field}Url`]: publicUrl }));
+        } catch (error) {
+            console.error(`Error uploading ${field}: `, error);
+            alert(error.message || `Erro ao carregar ${field}.`);
+        } finally {
+            setUploading(prev => ({ ...prev, [field]: false }));
+        }
+    };
+
+    if (loading) return <div className="admin-loading">Carregando configurações...</div>;
+
+    return (
+        <div className="fade-in">
+            <h2 className="admin-section-title">Configurações Base</h2>
+
+            <div className="glass-panel" style={{ padding: '20px', borderRadius: 12, marginBottom: 20 }}>
+                <h3 style={{ marginBottom: 16, fontSize: '1.1rem', color: 'var(--color-primary)' }}>🎨 Identidade Visual (Logo e Banner)</h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+                    {/* Logo Upload */}
+                    <div className="form-group">
+                        <label>Logo do Estúdio</label>
+                        {form.logoUrl ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ background: '#111', padding: '10px', borderRadius: '8px', display: 'flex', justifyContent: 'center' }}>
+                                    <img src={form.logoUrl} alt="Logo preview" style={{ height: '80px', objectFit: 'contain' }} />
+                                </div>
+                                <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, logoUrl: '' }))} type="button">Remover Logo</button>
+                            </div>
+                        ) : (
+                            <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'logo')} disabled={uploading.logo} className="form-input" style={{ paddingTop: '10px', paddingBottom: '10px' }} />
+                        )}
+                        {uploading.logo && <span style={{ fontSize: '12px', color: 'var(--color-primary)' }}>Enviando...</span>}
+                    </div>
+
+                    {/* Banner Upload */}
+                    <div className="form-group">
+                        <label>Imagem de Fundo (Banner Principal)</label>
+                        {form.bannerUrl ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <img src={form.bannerUrl} alt="Banner preview" style={{ height: '100px', width: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                                <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, bannerUrl: '' }))} type="button">Remover Banner</button>
+                            </div>
+                        ) : (
+                            <input type="file" accept="image/*" onChange={e => handleFileUpload(e, 'banner')} disabled={uploading.banner} className="form-input" style={{ paddingTop: '10px', paddingBottom: '10px' }} />
+                        )}
+                        {uploading.banner && <span style={{ fontSize: '12px', color: 'var(--color-primary)' }}>Enviando...</span>}
+                    </div>
+                </div>
+
+                <h4 style={{ fontSize: '0.9rem', color: '#888', marginBottom: '10px' }}>Textos Base</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
+                    <SettingsField label="Título no Menu Superior" field="menuTitle" placeholder="Ex: INK HAVEN TATTOO" form={form} setForm={setForm} />
+                    <SettingsField label="Título Principal (Banner)" field="heroTitle" placeholder="Ex: INK HAVEN TATTOO" form={form} setForm={setForm} />
+                    <SettingsField label="Subtítulo / Slogan" field="heroSubtitle" placeholder="Ex: Arte na pele. Histórias eternizadas." form={form} setForm={setForm} />
+                </div>
+            </div>
+
+            <div className="glass-panel" style={{ padding: '20px', borderRadius: 12, marginBottom: 20 }}>
+                <h3 style={{ marginBottom: 16, fontSize: '1.1rem', color: 'var(--color-primary)' }}>📞 Contato & Info</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    <SettingsField label="Telefone" field="phone" form={form} setForm={setForm} />
+                    <SettingsField label="WhatsApp (apenas números)" field="whatsapp" placeholder="5531971129936" form={form} setForm={setForm} />
+                </div>
+                <SettingsField label="Instagram (link)" field="instagram" form={form} setForm={setForm} />
+                <SettingsField label="Endereço Completo" field="address" form={form} setForm={setForm} />
+            </div>
+
+            <div className="glass-panel" style={{ padding: '20px', borderRadius: 12, marginBottom: 20 }}>
+                <h3 style={{ marginBottom: 16, fontSize: '1.1rem', color: 'var(--color-primary)' }}>🕐 Horários de Funcionamento</h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 15 }}>Deixe "Abre" e "Fecha" em branco para dias em que o estúdio estiver fechado.</p>
+                <SettingsTimeField labelPrefix="Dias úteis" prefixKey="weekdays" form={form} setForm={setForm} />
+                <SettingsTimeField labelPrefix="Finais de semana 1" prefixKey="saturdays" form={form} setForm={setForm} />
+                <SettingsTimeField labelPrefix="Finais de semana 2" prefixKey="sundays" form={form} setForm={setForm} />
+            </div>
+
+            <button className="admin-btn-primary neon-glow" style={{ width: '100%', padding: '15px', fontSize: '1.1rem' }} onClick={save}>
+                {saved ? '✅ Salvo com sucesso!' : <><Save size={18} style={{ marginRight: 8 }} />Salvar Configurações</>}
+            </button>
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FINANCES TAB
+// ══════════════════════════════════════════════════════════════════════════════
+
+const FinancesTab = () => {
+    const [finances, setFinances] = useState({
+        faturamentoReal: 0,
+        faturamentoPrevisto: 0,
+        valoresPerdidos: 0,
+        depositosRecebidos: 0
+    });
+    const [recentTransactions, setRecentTransactions] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchFinances = useCallback(async () => {
+        setLoading(true);
+        // We'll calculate finances based on appointments
+        const { data } = await supabase.from('appointments').select(`
+            *,
+            customers(name),
+            services(name)
+                `).order('date', { ascending: false });
+        if (data) {
+            let real = 0;
+            let previsto = 0;
+            let perdidos = 0;
+            let depositos = 0;
+            const txs = [];
+
+            data.forEach(app => {
+                const sPrice = parseFloat(app.session_price) || 0;
+                const dPrice = parseFloat(app.deposit_price) || 0;
+                const clientName = app.client_name || app.customers?.name || 'Cliente';
+                const serviceName = app.service_name || app.services?.name || 'Serviço';
+
+                if (app.status === 'cancelled') {
+                    perdidos += sPrice;
+                    txs.push({ id: `canc - ${app.id} `, date: app.date, desc: `Cancelamento: ${serviceName} (${clientName})`, amount: -sPrice, type: 'expense' });
+                } else if (app.status === 'completed') {
+                    // Entire session is realized
+                    real += sPrice;
+                    const remaining = sPrice - (app.deposit_status === 'paid' ? dPrice : 0);
+
+                    if (app.deposit_status === 'paid') {
+                        depositos += dPrice;
+                        txs.push({ id: `dep-${app.id} `, date: app.date, desc: `Sinal: ${serviceName} (${clientName})`, amount: dPrice, type: 'income' });
+                    }
+                    if (remaining > 0) {
+                        txs.push({ id: `ses - ${app.id} `, date: app.date, desc: `Sessão Finalizada: ${serviceName} (${clientName})`, amount: remaining, type: 'income' });
+                    } else if (remaining === 0 && app.deposit_status !== 'paid' && sPrice > 0) {
+                        txs.push({ id: `ses - ${app.id} `, date: app.date, desc: `Sessão Finalizada: ${serviceName} (${clientName})`, amount: sPrice, type: 'income' });
+                    }
+                } else {
+                    // Pending or Confirmed
+                    previsto += sPrice;
+                    if (app.deposit_status === 'paid') {
+                        real += dPrice;
+                        depositos += dPrice;
+                        txs.push({ id: `dep - ${app.id} `, date: app.date, desc: `Sinal: ${serviceName} (${clientName})`, amount: dPrice, type: 'income' });
+                    }
+                }
+            });
+
+            setFinances({
+                faturamentoReal: real,
+                faturamentoPrevisto: previsto,
+                valoresPerdidos: perdidos,
+                depositosRecebidos: depositos
+            });
+
+            setRecentTransactions(txs.slice(0, 15)); // Top 15 recent transactions
+        }
+        setLoading(false);
+    }, []);
+
+    useEffect(() => { fetchFinances(); }, [fetchFinances]);
+
+    const exportToExcel = () => {
+        if (recentTransactions.length === 0) return alert('Nenhum dado para exportar.');
+
+        // Format data for Excel
+        const exportData = recentTransactions.map(t => ({
+            'Data': t.date.split('-').reverse().join('/'),
+            'Descrição': t.desc,
+            'Tipo': t.type === 'income' ? 'Entrada' : 'Saída',
+            'Valor (R$)': t.type === 'expense' ? -Math.abs(t.amount) : Math.abs(t.amount)
+        }));
+
+        // Create workbook and worksheet
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+        // Adjust column widths
+        const wscols = [
+            { wch: 15 }, // Data
+            { wch: 50 }, // Descrição
+            { wch: 15 }, // Tipo
+            { wch: 15 }  // Valor
+        ];
+        worksheet['!cols'] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Financeiro");
+
+        // Format Date for filename
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const fileName = `financeiro - estudio - ${yyyy} -${mm} -${dd}.xlsx`;
+
+        // Export
+        XLSX.writeFile(workbook, fileName);
+    };
+
+    if (loading) return <div className="admin-loading">Carregando dados financeiros...</div>;
+
+    return (
+        <div className="fade-in">
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Financeiro</h2>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button className="admin-refresh-btn" onClick={exportToExcel} style={{ color: '#10B981', borderColor: '#10B981' }}>
+                        <Download size={16} /> Exportar Excel
+                    </button>
+                    <button className="admin-refresh-btn" onClick={fetchFinances}>
+                        <RefreshCw size={16} /> Atualizar
+                    </button>
+                </div>
+            </div>
+
+            <div className="admin-stats-grid" style={{ marginBottom: '30px' }}>
+                <StatCard icon="💰" label="Faturamento Real" value={`R$ ${finances.faturamentoReal.toFixed(2)} `} color="#4ade80" />
+                <StatCard icon="📅" label="Faturamento Previsto" value={`R$ ${finances.faturamentoPrevisto.toFixed(2)} `} color="#60a5fa" />
+                <StatCard icon="📉" label="Valores Cancelados" value={`R$ ${finances.valoresPerdidos.toFixed(2)} `} color="#ef4444" />
+                <StatCard icon="💎" label="Sinais Recebidos" value={`R$ ${finances.depositosRecebidos.toFixed(2)} `} color="var(--color-primary)" />
+            </div>
+
+            <div className="admin-table-wrap glass-panel" style={{ padding: '20px' }}>
+                <h3 style={{ marginBottom: '15px', color: 'var(--color-primary)' }}>Transações Recentes</h3>
+                {recentTransactions.length === 0 ? <p className="text-muted">Nenhuma transação encontrada.</p> : (
+                    <table className="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Descrição</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {recentTransactions.map(t => (
+                                <tr key={t.id}>
+                                    <td>{t.date.split('-').reverse().join('/')}</td>
+                                    <td>{t.desc}</td>
+                                    <td style={{ color: t.type === 'expense' ? '#ef4444' : '#4ade80', fontWeight: 'bold' }}>
+                                        {t.type === 'expense' ? '-' : '+'} R$ {Math.abs(t.amount).toFixed(2)}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CATEGORIES TAB
+// ══════════════════════════════════════════════════════════════════════════════
+const CategoriesTab = () => {
+    const [categories, setCategories] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [form, setForm] = useState({ id: null, name: '' });
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [bulkAction, setBulkAction] = useState('');
+
+    const fetchCategories = useCallback(async () => {
+        setLoading(true);
+        const { data } = await supabase.from('gallery_categories').select('*').order('name');
+        setCategories(data || []);
+        setSelectedIds([]);
+        setLoading(false);
+    }, []);
+
+    useEffect(() => { fetchCategories(); }, [fetchCategories]);
+
+    const openNew = () => { setForm({ id: null, name: '' }); setShowModal(true); };
+
+    const openEdit = (cat) => { setForm(cat); setShowModal(true); };
+
+    const save = async () => {
+        if (!form.name.trim()) return alert('O nome da categoria é obrigatório.');
+
+        if (form.id) {
+            await supabase.from('gallery_categories').update({ name: form.name }).eq('id', form.id);
+        } else {
+            const { error } = await supabase.from('gallery_categories').insert([{ name: form.name }]);
+            if (error && error.code === '23505') return alert('Esta categoria já existe.');
+        }
+        setShowModal(false);
+        fetchCategories();
+    };
+
+    const remove = async (id) => {
+        if (!confirm('Excluir esta categoria? Isso pode afetar imagens na galeria.')) return;
+        const { error } = await supabase.from('gallery_categories').delete().eq('id', id);
+        if (error) alert('Não foi possível excluir a categoria. Talvez existam fotos vinculadas a ela.');
+        setCategories(prev => prev.filter(c => c.id !== id));
+        setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+    };
+
+    const toggleSelectAll = (e) => {
+        if (e.target.checked) setSelectedIds(categories.map(c => c.id));
+        else setSelectedIds([]);
+    };
+
+    const toggleSelectOne = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const handleBulkAction = async () => {
+        if (!bulkAction || selectedIds.length === 0) return;
+
+        if (bulkAction === 'delete') {
+            if (!confirm(`ATENÇÃO: Excluir ${selectedIds.length} categoria(s) pode afetar imagens na galeria.\n\nTem certeza que deseja continuar?`)) return;
+            const { error } = await supabase.from('gallery_categories').delete().in('id', selectedIds);
+            if (error) alert('Ocorreu um erro ao excluir algumas categorias. Talvez existam fotos vinculadas a elas.');
+            setCategories(prev => prev.filter(c => !selectedIds.includes(c.id)));
+        }
+
+        setSelectedIds([]);
+        setBulkAction('');
+    };
+
+    return (
+        <div className="fade-in">
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Categorias da Galeria</h2>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button className="admin-refresh-btn" onClick={fetchCategories}><RefreshCw size={16} /> <span>Atualizar</span></button>
+                    <button className="admin-add-btn neon-glow" onClick={openNew}><Plus size={16} /> <span>Nova Categoria</span></button>
+                </div>
+            </div>
+
+            {/* Bulk Actions Bar */}
+            {selectedIds.length > 0 && (
+                <div className="admin-bulk-actions glass-panel">
+                    <span style={{ fontWeight: 'bold' }}>{selectedIds.length} selecionado(s)</span>
+                    <select className="form-input" style={{ width: 'auto', padding: '8px', flex: 1, maxWidth: '250px' }} value={bulkAction} onChange={e => setBulkAction(e.target.value)}>
+                        <option value="">Escolha uma ação...</option>
+                        <option value="delete">Excluir Selecionados</option>
+                    </select>
+                    <button className="admin-btn-primary" style={{ padding: '8px 16px' }} onClick={handleBulkAction} disabled={!bulkAction}>Aplicar</button>
+                    <button className="admin-btn-secondary" style={{ padding: '8px 16px', marginLeft: 'auto' }} onClick={() => setSelectedIds([])}><X size={14} /> Limpar Seleção</button>
+                </div>
+            )}
+
+            {loading ? <div className="admin-loading">Carregando categorias...</div> : (
+                <div className="admin-table-wrap glass-panel">
+                    <table className="admin-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '50px', textAlign: 'center' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedIds.length === categories.length && categories.length > 0}
+                                        onChange={toggleSelectAll}
+                                        style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                    />
+                                </th>
+                                <th>Nome da Categoria</th>
+                                <th style={{ width: '100px', textAlign: 'center' }}>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {categories.map(cat => (
+                                <tr key={cat.id} style={selectedIds.includes(cat.id) ? { backgroundColor: 'var(--color-glow)' } : {}}>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.includes(cat.id)}
+                                            onChange={() => toggleSelectOne(cat.id)}
+                                            style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                                        />
+                                    </td>
+                                    <td>{cat.name}</td>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                            <button className="action-btn edit" onClick={() => openEdit(cat)} title="Editar"><Pencil size={18} /></button>
+                                            <button className="action-btn delete" onClick={() => remove(cat.id)} title="Excluir"><Trash2 size={18} /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {categories.length === 0 && <tr><td colSpan="3" className="text-center text-muted">Nenhuma categoria cadastrada.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {showModal && (
+                <Modal title={form.id ? "Editar Categoria" : "Nova Categoria"} onClose={() => setShowModal(false)}>
+                    <div className="admin-form">
+                        <div className="form-group">
+                            <label>Nome da Categoria *</label>
+                            <input type="text" className="form-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} autoFocus />
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                            <button className="admin-btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                            <button className="admin-btn-primary neon-glow" onClick={save}><Save size={16} /> Salvar</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GALLERY TAB
+// ══════════════════════════════════════════════════════════════════════════════
+const GalleryTab = () => {
+    const { fetchImagesAndContext: fetchContext } = useContext(SiteContext);
+    const [images, setImages] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [selectedImage, setSelectedImage] = useState(null);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [form, setForm] = useState({ image_url: '', category_id: '', featured: false });
+
+    const fetchImages = useCallback(async () => {
+        setLoading(true);
+        const [imgsRes, catsRes] = await Promise.all([
+            supabase.from('gallery').select('*, gallery_categories(name)').order('featured', { ascending: false }).order('created_at', { ascending: false }),
+            supabase.from('gallery_categories').select('*').order('name')
+        ]);
+        setImages(imgsRes.data || []);
+        setCategories(catsRes.data || []);
+        setLoading(false);
+    }, []);
+
+    useEffect(() => { fetchImages(); }, [fetchImages]);
+
+    const fetchImagesAndContext = () => {
+        fetchImages();
+        fetchContext();
+    };
+
+    const openNew = () => { setForm({ image_url: '', category_id: '', featured: false }); setShowModal(true); };
+
+    const save = async () => {
+        if (!form.image_url) return alert('É necessário fazer o upload de uma imagem');
+        if (!form.category_id) return alert('A categoria da foto é obrigatória');
+
+        const { error } = await supabase.from('gallery').insert([{
+            image_url: form.image_url,
+            category_id: form.category_id,
+            featured: form.featured
+        }]);
+
+        if (error) {
+            console.error('Error saving gallery image:', error);
+            return alert('Erro ao salvar no banco de dados: ' + error.message);
+        }
+
+        setShowModal(false);
+        fetchImagesAndContext();
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploading(true);
+        try {
+            // Optimize image via WebP before uploading
+            const optimizedFile = await compressToWebP(file, 5, 0.8);
+            const sanitizedName = optimizedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+            const fileName = `gallery/${Date.now()}_${sanitizedName}`;
+            const publicUrl = await uploadStorageFile('uploads', fileName, optimizedFile);
+            setForm(f => ({ ...f, image_url: publicUrl }));
+        } catch (error) {
+            console.error('Error uploading:', error);
+            alert(error.message || 'Erro ao processar/upload da imagem.');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const remove = async (id) => {
+        if (!confirm('Excluir esta foto da galeria?')) return;
+        await supabase.from('gallery').delete().eq('id', id);
+        fetchImagesAndContext();
+    };
+
+    const toggleFeatured = async (img) => {
+        await supabase.from('gallery').update({ featured: !img.featured }).eq('id', img.id);
+        fetchImagesAndContext();
+    };
+
+    const openLightbox = (img, index) => {
+        setSelectedImage(img);
+        setCurrentIndex(index);
+    };
+
+    const nextImage = (e) => {
+        e.stopPropagation();
+        const nextIdx = (currentIndex + 1) % images.length;
+        setSelectedImage(images[nextIdx]);
+        setCurrentIndex(nextIdx);
+    };
+
+    const prevImage = (e) => {
+        e.stopPropagation();
+        const prevIdx = (currentIndex - 1 + images.length) % images.length;
+        setSelectedImage(images[prevIdx]);
+        setCurrentIndex(prevIdx);
+    };
+
+    return (
+        <div className="fade-in">
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Galeria de Tattoos</h2>
+                <button className="admin-add-btn neon-glow" onClick={openNew}><Plus size={16} /> <span>Nova Foto</span></button>
+            </div>
+
+            {loading ? <div className="admin-loading">Carregando galeria...</div> : (
+                <div className="admin-gallery-grid">
+                    {images.map((img, idx) => (
+                        <div key={img.id} className="glass-panel portfolio-item" onClick={() => openLightbox(img, idx)}>
+                            <img src={img.image_url} alt="Galeria" className="portfolio-image" style={{ height: '160px' }} />
+
+                            <div className="portfolio-item-overlay">
+                                <Maximize2 size={18} color="#FFF" />
+                            </div>
+
+                            <div className="gallery-item-info">
+                                <span className="gallery-item-category">{img.gallery_categories?.name || 'Sem Categoria'}</span>
+                            </div>
+
+                            <button className="action-btn delete" onClick={(e) => { e.stopPropagation(); remove(img.id); }}
+                                style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.6)', color: '#ef4444', border: 'none', padding: '6px', borderRadius: '50%', cursor: 'pointer', zIndex: 10 }}>
+                                <Trash2 size={14} />
+                            </button>
+                            <button className="action-btn edit" onClick={(e) => { e.stopPropagation(); toggleFeatured(img); }} title={img.featured ? "Remover Destaque" : "Destacar Imagem"}
+                                style={{ position: 'absolute', top: '8px', right: '40px', background: 'rgba(0,0,0,0.6)', color: img.featured ? '#facc15' : '#ccc', border: 'none', padding: '6px', borderRadius: '50%', cursor: 'pointer', zIndex: 10 }}>
+                                <Trophy size={14} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* ── Lightbox Modal ── */}
+            {selectedImage && (
+                <div className="lightbox-overlay" onClick={() => setSelectedImage(null)}>
+                    <button className="lightbox-close" onClick={() => setSelectedImage(null)}>
+                        <X size={32} />
+                    </button>
+
+                    <button className="lightbox-nav prev" onClick={prevImage}>
+                        <ChevronLeft size={48} />
+                    </button>
+
+                    <div className="lightbox-content" onClick={e => e.stopPropagation()}>
+                        <img src={selectedImage.image_url} alt="Expanded" className="lightbox-image" />
+                    </div>
+
+                    <button className="lightbox-nav next" onClick={nextImage}>
+                        <ChevronRight size={48} />
+                    </button>
+                </div>
+            )}
+
+            {showModal && (
+                <Modal title="Nova Foto para Galeria" onClose={() => setShowModal(false)}>
+                    <div className="admin-form">
+                        <div className="form-group">
+                            <label>Foto da Galeria</label>
+                            {form.image_url ? (
+                                <div style={{ marginBottom: '15px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: 0 }}>Pré-visualização:</p>
+                                        <button className="admin-btn-secondary" onClick={() => setForm(f => ({ ...f, image_url: '' }))} type="button" style={{ padding: '4px 8px', fontSize: '11px' }}>
+                                            Remover / Trocar
+                                        </button>
+                                    </div>
+                                    <img src={form.image_url} alt="preview" style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px' }} />
+                                </div>
+                            ) : (
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleFileUpload}
+                                    disabled={uploading}
+                                    className="form-input"
+                                />
+                            )}
+                            {uploading && <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '5px' }}>Otimizando p/ WebP e transferindo para nuvem...</div>}
+                        </div>
+                        <div className="form-group">
+                            <label>Categoria da Tatuagem *</label>
+                            <select className="form-input" value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })}>
+                                <option value="">Selecione uma categoria...</option>
+                                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                            <input type="checkbox" id="featured" checked={form.featured} onChange={e => setForm({ ...form, featured: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+                            <label htmlFor="featured" style={{ cursor: 'pointer', margin: 0, fontWeight: 'normal' }}>Marcar como Destaque</label>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                            <button className="admin-btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                            <button className="admin-btn-primary neon-glow" onClick={save}><Save size={16} /> Salvar</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+export default Admin;
