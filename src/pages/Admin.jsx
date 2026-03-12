@@ -61,7 +61,8 @@ const TABS = [
     { id: 'subscriptions', icon: <User size={18} />, label: 'Mensalistas' },
     { id: 'customers', icon: <Users size={18} />, label: 'Clientes' },
     { id: 'services', icon: <Scissors size={18} />, label: 'Serviços' },
-    { id: 'planspromos', icon: <Megaphone size={18} />, label: 'Planos & Promoções' },
+    { id: 'planspromos', icon: <Megaphone size={18} />, label: 'Gerenciar Promoções' },
+    { id: 'promo_interests', icon: <Bell size={18} />, label: 'Interessados / Ofertas' },
     { id: 'artists', icon: <Trophy size={18} />, label: 'Profissionais' },
     { id: 'categories', icon: <Tag size={18} />, label: 'Categorias' },
     { id: 'gallery', icon: <ImageIcon size={18} />, label: 'Galeria' },
@@ -147,9 +148,27 @@ const Admin = () => {
             })
             .subscribe();
 
+        const promoInterestChannel = supabase
+            .channel('promo_interests_realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'promotion_interests' }, (payload) => {
+                const newInterest = payload.new;
+                const notif = {
+                    id: Date.now(),
+                    type: 'promo_interest',
+                    title: 'Novo Interesse em Promoção! 🎁',
+                    message: `${newInterest.customer_name} quer aproveitar uma oferta!`,
+                    data: newInterest
+                };
+                setNotificationQueue(q => [notif, ...q]);
+                setUnreadCount(prev => prev + 1);
+                setActiveAlert(notif);
+            })
+            .subscribe();
+
         return () => {
             supabase.removeChannel(appointmentChannel);
             supabase.removeChannel(subscriptionChannel);
+            supabase.removeChannel(promoInterestChannel);
         };
     }, []);
 
@@ -167,7 +186,10 @@ const Admin = () => {
 
     // Navigate to respective tab and clear badge
     const handleNotificationClick = (notif) => {
-        const targetTab = notif?.type === 'subscription' ? 'subscriptions' : 'appointments';
+        let targetTab = 'appointments';
+        if (notif?.type === 'subscription') targetTab = 'subscriptions';
+        if (notif?.type === 'promo_interest') targetTab = 'promo_interests';
+
         // Se clicar em uma notificação específica, remove só ela
         if (notif) {
             setNotificationQueue(prev => prev.filter(n => n !== notif));
@@ -197,7 +219,9 @@ const Admin = () => {
                 <div className="admin-central-alert-overlay fade-in">
                     <div className="admin-central-alert glass-panel bounce-in">
                         <div className="alert-icon-main">
-                            {activeAlert.type === 'subscription' ? <Star size={40} className="neon-text" /> : <Bell size={40} className="neon-text" />}
+                            {activeAlert.type === 'subscription' ? <Star size={40} className="neon-text" /> :
+                                activeAlert.type === 'promo_interest' ? <Megaphone size={40} className="neon-text" /> :
+                                    <Bell size={40} className="neon-text" />}
                         </div>
                         <h3>{activeAlert.title}</h3>
                         <p>{activeAlert.message}</p>
@@ -341,6 +365,7 @@ const Admin = () => {
                 {activeTab === 'finances' && <FinancesTab />}
                 {activeTab === 'settings' && <SettingsTab siteData={siteData} updateSiteData={updateSiteData} />}
                 {activeTab === 'planspromos' && <PlansPromosTab />}
+                {activeTab === 'promo_interests' && <PromotionInterestsTab />}
             </main>
         </div>
     );
@@ -2708,6 +2733,118 @@ const CategoriesTab = () => {
                     </div>
                 </Modal>
             )}
+        </div>
+    );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PROMOTION INTERESTS TAB
+// ══════════════════════════════════════════════════════════════════════════════
+const PromotionInterestsTab = () => {
+    const { siteData } = useContext(SiteContext);
+    const [interests, setInterests] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [filterStatus, setFilterStatus] = useState('all');
+
+    const fetchInterests = useCallback(async () => {
+        setLoading(true);
+        let query = supabase.from('promotion_interests').select('*, promotions(title)').order('created_at', { ascending: false });
+        if (filterStatus !== 'all') {
+            query = query.eq('status', filterStatus);
+        }
+        const { data } = await query;
+        setInterests(data || []);
+        setLoading(false);
+    }, [filterStatus]);
+
+    useEffect(() => { fetchInterests(); }, [fetchInterests]);
+
+    const updateStatus = async (id, status) => {
+        const { error } = await supabase.from('promotion_interests').update({ status }).eq('id', id);
+        if (error) alert(error.message);
+        else fetchInterests();
+    };
+
+    const removeInterest = async (id) => {
+        if (!confirm('Deseja excluir este registro?')) return;
+        await supabase.from('promotion_interests').delete().eq('id', id);
+        fetchInterests();
+    };
+
+    const handleWhatsApp = (interest) => {
+        const promoTitle = interest.promotions?.title || 'a promoção';
+        const msg = encodeURIComponent(`Olá ${interest.customer_name}! Recebemos seu interesse na oferta "${promoTitle}". Como posso ajudar?`);
+        window.open(`https://wa.me/${interest.customer_phone.replace(/\D/g, '')}?text=${msg}`, '_blank');
+        if (interest.status === 'pending') {
+            updateStatus(interest.id, 'contacted');
+        }
+    };
+
+    if (loading) return <div className="admin-loading">Carregando interesses...</div>;
+
+    return (
+        <div className="fade-in">
+            <div className="admin-section-header">
+                <h2 className="admin-section-title">Interessados em Ofertas</h2>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="admin-filter-select">
+                        <option value="all">Todos os Status</option>
+                        <option value="pending">Pendentes</option>
+                        <option value="contacted">Contatados</option>
+                        <option value="completed">Concluídos</option>
+                        <option value="cancelled">Cancelados</option>
+                    </select>
+                    <button className="admin-add-btn" onClick={fetchInterests}><RefreshCw size={16} /></button>
+                </div>
+            </div>
+
+            <div className="glass-panel admin-table-container">
+                <table className="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Cliente</th>
+                            <th>Promoção</th>
+                            <th>Status</th>
+                            <th style={{ textAlign: 'right' }}>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {interests.map(item => (
+                            <tr key={item.id}>
+                                <td style={{ fontSize: '0.8rem' }}>{new Date(item.created_at).toLocaleDateString()}</td>
+                                <td>
+                                    <div style={{ fontWeight: 600 }}>{item.customer_name}</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#888' }}>{item.customer_phone}</div>
+                                </td>
+                                <td>{item.promotions?.title || '---'}</td>
+                                <td><StatusBadge status={item.status} /></td>
+                                <td style={{ textAlign: 'right' }}>
+                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                        <button className="action-btn confirmed" title="WhatsApp" onClick={() => handleWhatsApp(item)}>
+                                            <Bell size={16} />
+                                        </button>
+                                        <select
+                                            value={item.status}
+                                            onChange={(e) => updateStatus(item.id, e.target.value)}
+                                            style={{ background: '#222', color: '#eee', border: '1px solid #444', borderRadius: '4px', fontSize: '0.75rem', padding: '2px 4px' }}
+                                        >
+                                            <option value="pending">Pendente</option>
+                                            <option value="contacted">Contatado</option>
+                                            <option value="completed">Concluído</option>
+                                            <option value="cancelled">Cancelado</option>
+                                        </select>
+                                        <button className="action-btn delete" onClick={() => removeInterest(item.id)}><Trash2 size={16} /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {interests.length === 0 && (
+                            <tr><td colSpan="5" className="admin-empty">Nenhum interesse registrado com este filtro.</td></tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };

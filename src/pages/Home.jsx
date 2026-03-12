@@ -20,6 +20,12 @@ const Home = () => {
         observation: ''
     });
 
+    const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+    const [promoFormData, setPromoFormData] = useState({
+        name: '',
+        phone: ''
+    });
+
     // Populate artists for the dropdown
     useEffect(() => {
         const fetchArtists = async () => {
@@ -84,8 +90,8 @@ const Home = () => {
                                     <h3 style={{ fontFamily: 'Montserrat, sans-serif', fontSize: '1.4rem', color: 'var(--color-text)', marginBottom: '8px', textTransform: 'uppercase' }}>{promo.title}</h3>
                                     <p style={{ color: 'var(--color-text-muted)', fontSize: '1rem', whiteSpace: 'pre-line', marginBottom: '20px', lineHeight: '1.5' }}>{promo.description}</p>
                                     <button className="btn-app-primary" style={{ width: '100%' }} onClick={() => {
-                                        const msg = encodeURIComponent(`Olá! Gostaria de aproveitar a oferta "${promo.title}". Poderia me dar mais informações?`);
-                                        window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=${msg}`, '_blank');
+                                        setSelectedPlan(promo); // Reuse selectedPlan or create selectedPromo
+                                        setIsPromoModalOpen(true);
                                     }}>
                                         APROVEITAR PROMOÇÃO
                                     </button>
@@ -414,6 +420,69 @@ const Home = () => {
                 </div>
             )}
 
+            {/* 🎁 PROMO INTEREST MODAL */}
+            {isPromoModalOpen && (
+                <div className="app-modal-overlay fade-in">
+                    <div className="app-modal-content slide-up">
+                        <div className="app-modal-header">
+                            <h3 className="app-title-font">QUERO ESTA OFERTA!</h3>
+                            <button className="app-modal-close" onClick={() => setIsPromoModalOpen(false)}>
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <p className="app-modal-subtitle">Confirme seus dados para aproveitar a oferta <strong>{selectedPlan?.title}</strong>.</p>
+
+                        <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            try {
+                                const { error } = await supabase.from('promotion_interests').insert([{
+                                    promotion_id: selectedPlan.id,
+                                    customer_name: promoFormData.name,
+                                    customer_phone: promoFormData.phone,
+                                    status: 'pending'
+                                }]);
+
+                                if (error) throw error;
+
+                                const msg = encodeURIComponent(`Olá! Gostaria de aproveitar a oferta "${selectedPlan.title}". Meu nome é ${promoFormData.name}. Poderia me dar mais informações?`);
+                                window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=${msg}`, '_blank');
+                                setIsPromoModalOpen(false);
+                            } catch (error) {
+                                console.error('Error saving promo interest:', error);
+                                alert('Erro ao registrar interesse: ' + error.message);
+                            }
+                        }}>
+                            <div className="app-form">
+                                <div className="form-group">
+                                    <label>Seu Nome *</label>
+                                    <input
+                                        type="text"
+                                        className="app-form-control"
+                                        placeholder="Como devemos lhe chamar?"
+                                        value={promoFormData.name}
+                                        onChange={e => setPromoFormData({ ...promoFormData, name: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>WhatsApp *</label>
+                                    <input
+                                        type="tel"
+                                        className="app-form-control"
+                                        placeholder="(11) 99999-9999"
+                                        value={promoFormData.phone}
+                                        onChange={e => setPromoFormData({ ...promoFormData, phone: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <button type="submit" className="btn-app-primary" style={{ width: '100%', marginTop: '10px' }}>
+                                    CONFIRMAR E IR PARA WHATSAPP
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
