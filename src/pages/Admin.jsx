@@ -1706,6 +1706,8 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
     const [showModal, setShowModal] = useState(false);
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState({ name: '', description: '', price: '', duration_mins: '', is_featured: false });
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [bulkAction, setBulkAction] = useState('');
 
     const fetchServices = useCallback(async () => {
         setLoading(true);
@@ -1770,6 +1772,33 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
         if (updateSiteData) updateSiteData();
     };
 
+    const toggleSelectAll = (e) => {
+        if (e.target.checked) setSelectedIds(services.map(s => s.id));
+        else setSelectedIds([]);
+    };
+
+    const toggleSelectOne = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const handleBulkAction = async () => {
+        if (!bulkAction || selectedIds.length === 0) return;
+
+        if (bulkAction === 'delete') {
+            if (!confirm(`Tem certeza que deseja excluir ${selectedIds.length} serviço(s)? Isso pode afetar agendamentos existentes.`)) return;
+            const { error } = await supabase.from('services').delete().in('id', selectedIds);
+            if (error) {
+                console.error('Error deleting services:', error);
+                return alert('Erro ao excluir alguns serviços: ' + error.message);
+            }
+            fetchServices();
+            if (updateSiteData) updateSiteData();
+        }
+
+        setSelectedIds([]);
+        setBulkAction('');
+    };
+
     return (
         <div className="fade-in">
             <div className="admin-section-header">
@@ -1780,11 +1809,46 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
                 </button>
             </div>
 
+            {/* Bulk Actions Bar */}
+            {selectedIds.length > 0 && (
+                <div className="admin-bulk-actions glass-panel" style={{ marginTop: '20px' }}>
+                    <span style={{ fontWeight: 'bold' }}>{selectedIds.length} selecionado(s)</span>
+                    <select
+                        className="form-input"
+                        style={{ width: 'auto', padding: '8px', flex: 1, maxWidth: '250px' }}
+                        value={bulkAction}
+                        onChange={e => setBulkAction(e.target.value)}
+                    >
+                        <option value="">Ações em massa...</option>
+                        <option value="delete">Excluir Selecionados</option>
+                    </select>
+                    <button
+                        className="admin-btn-primary"
+                        style={{ padding: '8px 16px' }}
+                        onClick={handleBulkAction}
+                        disabled={!bulkAction}
+                    >Aplicar</button>
+                    <button
+                        className="admin-btn-secondary"
+                        style={{ padding: '8px 16px', marginLeft: 'auto' }}
+                        onClick={() => setSelectedIds([])}
+                    ><X size={14} /> Limpar Seleção</button>
+                </div>
+            )}
+
             {loading ? <div className="admin-loading">Carregando serviços...</div> : (
                 <div className="admin-table-wrap glass-panel">
                     <table className="admin-table">
                         <thead>
                             <tr>
+                                <th style={{ width: '40px', textAlign: 'center' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedIds.length === services.length && services.length > 0}
+                                        onChange={toggleSelectAll}
+                                        style={{ transform: 'scale(0.95)', cursor: 'pointer' }}
+                                    />
+                                </th>
                                 <th>Nome</th>
                                 <th>Preço</th>
                                 <th>Duração</th>
@@ -1794,7 +1858,15 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
                         </thead>
                         <tbody>
                             {services.map(s => (
-                                <tr key={s.id}>
+                                <tr key={s.id} style={selectedIds.includes(s.id) ? { backgroundColor: 'var(--color-glow)' } : {}}>
+                                    <td style={{ textAlign: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.includes(s.id)}
+                                            onChange={() => toggleSelectOne(s.id)}
+                                            style={{ transform: 'scale(0.95)', cursor: 'pointer' }}
+                                        />
+                                    </td>
                                     <td>
                                         <div style={{ fontWeight: 'bold' }}>{s.name}</div>
                                         <div style={{ fontSize: '0.75rem', color: '#888' }}>{s.description}</div>
@@ -1810,7 +1882,7 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
                                     </td>
                                 </tr>
                             ))}
-                            {services.length === 0 && <tr><td colSpan="5" className="text-center text-muted">Nenhum serviço cadastrado.</td></tr>}
+                            {services.length === 0 && <tr><td colSpan="6" className="text-center text-muted">Nenhum serviço cadastrado.</td></tr>}
                         </tbody>
                     </table>
                 </div>
