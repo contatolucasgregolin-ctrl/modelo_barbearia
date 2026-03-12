@@ -445,6 +445,7 @@
     border: 1px solid var(--color-border);
     box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
     max-height: 90vh;
+    overflow-y: auto;
 }
 
 [data-theme="light"] .modal-content {
@@ -521,6 +522,8 @@
 }
 
 .form-input {
+    width: 100%;
+    box-sizing: border-box;
     padding: 12px 16px;
     border-radius: 12px;
     background: var(--color-bg);
@@ -571,5 +574,12 @@
         padding: 20px 16px;
         border-radius: 16px;
         max-height: 95vh;
+        width: 100%;
+        margin: 0 10px;
+    }
+    
+    .form-row {
+        flex-direction: column;
+        gap: 14px;
     }
 }

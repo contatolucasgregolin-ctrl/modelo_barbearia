@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, CalendarDays, Scissors, Users, Settings, LogOut,
     Plus, Trash2, Save, Pencil, X, Check, Ban, Trophy, Bell, RefreshCw, ChevronDown, User, TrendingUp, Image as ImageIcon, Tag, Eye,
-    ChevronLeft, ChevronRight, Maximize2, Sun, Moon, Download, Megaphone, Star
+    ChevronLeft, ChevronRight, Maximize2, Sun, Moon, Download, Megaphone, Star, MessageCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import '../styles/Admin.css';
@@ -14,9 +14,11 @@ import '../styles/Admin.css';
 const TODAY = new Date().toISOString().split('T')[0];
 
 const STATUS_LABELS = {
-    pending: { label: 'Pendente', color: 'var(--color-primary)' },
+    pending: { label: 'Pendente', color: '#facc15' },
     confirmed: { label: 'Confirmado', color: '#4ade80' },
     active: { label: 'Ativo', color: '#4ade80' },
+    contacted: { label: 'Contatado', color: '#a78bfa' },
+    completed: { label: 'Concluído', color: '#38bdf8' },
     cancelled: { label: 'Cancelado', color: '#ef4444' },
     finished: { label: 'Finalizado', color: '#a78bfa' },
     expired: { label: 'Expirado', color: '#f87171' },
@@ -388,6 +390,10 @@ const PlansPromosTab = () => {
     const [promoForm, setPromoForm] = useState({ id: null, title: '', description: '', image_url: '', active: true });
     const [uploading, setUploading] = useState(false);
 
+    // Inline delete confirmations
+    const [confirmDeletePromoId, setConfirmDeletePromoId] = useState(null);
+    const [confirmDeletePlanId, setConfirmDeletePlanId] = useState(null);
+
     const fetchData = useCallback(async () => {
         setLoading(true);
         const [plansRes, promosRes] = await Promise.all([
@@ -400,6 +406,26 @@ const PlansPromosTab = () => {
     }, []);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    // Real-time listeners for plans and promotions
+    useEffect(() => {
+        const plansChannel = supabase.channel('realtime-plans')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'plans' }, () => {
+                fetchData();
+            })
+            .subscribe();
+
+        const promosChannel = supabase.channel('realtime-promotions')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'promotions' }, () => {
+                fetchData();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(plansChannel);
+            supabase.removeChannel(promosChannel);
+        };
+    }, [fetchData]);
 
     const openPlan = (plan = null) => {
         if (plan) {
@@ -441,9 +467,19 @@ const PlansPromosTab = () => {
     };
 
     const deletePlan = async (id) => {
-        if (!confirm('Excluir este plano?')) return;
-        await supabase.from('plans').delete().eq('id', id);
-        fetchData();
+        try {
+            const { error } = await supabase.from('plans').delete().eq('id', id);
+            if (error) {
+                console.error("Error deleting plan:", error);
+                alert(`Erro ao excluir plano: ${error.message}`);
+            } else {
+                setConfirmDeletePlanId(null);
+                fetchData();
+            }
+        } catch (err) {
+            console.error("Exception deleting plan:", err);
+            alert("Ocorreu um erro inesperado ao excluir o plano.");
+        }
     };
 
     const openPromo = (promo = null) => {
@@ -492,9 +528,19 @@ const PlansPromosTab = () => {
     };
 
     const deletePromo = async (id) => {
-        if (!confirm('Excluir esta promoção?')) return;
-        await supabase.from('promotions').delete().eq('id', id);
-        fetchData();
+        try {
+            const { error } = await supabase.from('promotions').delete().eq('id', id);
+            if (error) {
+                console.error("Error deleting promotion:", error);
+                alert(`Erro ao excluir: ${error.message}`);
+            } else {
+                setConfirmDeletePromoId(null);
+                fetchData();
+            }
+        } catch (err) {
+            console.error("Exception deleting promotion:", err);
+            alert("Ocorreu um erro inesperado ao excluir a promoção.");
+        }
     };
 
     return (
@@ -513,9 +559,16 @@ const PlansPromosTab = () => {
                                     <h3 style={{ fontSize: '1.2rem', marginBottom: '8px' }}>{promo.title}</h3>
                                     <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', whiteSpace: 'pre-line', marginBottom: '16px' }}>{promo.description}</p>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button className="action-btn edit" onClick={() => openPromo(promo)}><Pencil size={16} /></button>
-                                    <button className="action-btn delete" onClick={() => deletePromo(promo.id)}><Trash2 size={16} /></button>
+                                <div style={{ display: 'flex', gap: '8px', zIndex: 10, position: 'relative' }}>
+                                    <button className="action-btn edit" onClick={(e) => { e.stopPropagation(); openPromo(promo); }}><Pencil size={16} /></button>
+                                    {confirmDeletePromoId === promo.id ? (
+                                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            <button style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); deletePromo(promo.id); }}>Sim</button>
+                                            <button style={{ background: '#555', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setConfirmDeletePromoId(null); }}>Não</button>
+                                        </div>
+                                    ) : (
+                                        <button className="action-btn delete" onClick={(e) => { e.stopPropagation(); setConfirmDeletePromoId(promo.id); }}><Trash2 size={16} /></button>
+                                    )}
                                 </div>
                             </div>
                             {promo.image_url && <img src={promo.image_url} alt="Promo" style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '8px', marginTop: '10px' }} />}
@@ -548,9 +601,16 @@ const PlansPromosTab = () => {
                                         <strong>Mensagem Zap:</strong> {plan.whatsapp_message || 'Padrão'}
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button className="action-btn edit" onClick={() => openPlan(plan)}><Pencil size={16} /></button>
-                                    <button className="action-btn delete" onClick={() => deletePlan(plan.id)}><Trash2 size={16} /></button>
+                                <div style={{ display: 'flex', gap: '8px', zIndex: 10, position: 'relative' }}>
+                                    <button className="action-btn edit" onClick={(e) => { e.stopPropagation(); openPlan(plan); }}><Pencil size={16} /></button>
+                                    {confirmDeletePlanId === plan.id ? (
+                                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            <button style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); deletePlan(plan.id); }}>Sim</button>
+                                            <button style={{ background: '#555', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setConfirmDeletePlanId(null); }}>Não</button>
+                                        </div>
+                                    ) : (
+                                        <button className="action-btn delete" onClick={(e) => { e.stopPropagation(); setConfirmDeletePlanId(plan.id); }}><Trash2 size={16} /></button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -682,56 +742,84 @@ const DashboardTab = () => {
     const [stats, setStats] = useState({ todayAppointments: 0, newCustomers: 0, completedSessions: 0, revenue: 0 });
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchStats = async () => {
-            setLoading(true);
-            try {
-                const today = new Date().toISOString().split('T')[0];
+    const fetchStats = useCallback(async () => {
+        setLoading(true);
+        try {
+            const today = new Date().toISOString().split('T')[0];
 
-                // 1. Agendamentos Hoje
-                const { count: countToday } = await supabase
-                    .from('appointments')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('date', today);
+            // 1. Agendamentos Hoje
+            const { count: countToday } = await supabase
+                .from('appointments')
+                .select('*', { count: 'exact', head: true })
+                .eq('date', today);
 
-                // 2. Clientes Novos Hoje
-                const { count: countCustomers } = await supabase
-                    .from('customers')
-                    .select('*', { count: 'exact', head: true })
-                    .gte('created_at', today);
+            // 2. Clientes Novos Hoje
+            const { count: countCustomers } = await supabase
+                .from('customers')
+                .select('*', { count: 'exact', head: true })
+                .gte('created_at', today);
 
-                // 3. Sessões Finalizadas de hoje
-                const { data: completedData } = await supabase
-                    .from('appointments')
-                    .select('session_price')
-                    .eq('date', today)
-                    .eq('status', 'finished');
+            // 3. Sessões Finalizadas de hoje
+            const { data: completedData } = await supabase
+                .from('appointments')
+                .select('session_price')
+                .eq('date', today)
+                .eq('status', 'finished');
 
-                const appRevenue = (completedData || []).reduce((acc, curr) => acc + (parseFloat(curr.session_price) || 0), 0);
+            const appRevenue = (completedData || []).reduce((acc, curr) => acc + (parseFloat(curr.session_price) || 0), 0);
 
-                // 4. Faturamento via tabela finances (hoje)
-                const { data: financesData } = await supabase
-                    .from('finances')
-                    .select('amount')
-                    .eq('date', today)
-                    .eq('type', 'income');
+            // 4. Faturamento via tabela finances (hoje)
+            const { data: financesData } = await supabase
+                .from('finances')
+                .select('amount')
+                .eq('date', today)
+                .eq('type', 'income');
 
-                const finRevenue = (financesData || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+            const finRevenue = (financesData || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
-                setStats({
-                    todayAppointments: countToday || 0,
-                    newCustomers: countCustomers || 0,
-                    completedSessions: (completedData || []).length,
-                    revenue: appRevenue + finRevenue
-                });
-            } catch (err) {
-                console.error('Erro ao carregar dashboard:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchStats();
+            setStats({
+                todayAppointments: countToday || 0,
+                newCustomers: countCustomers || 0,
+                completedSessions: (completedData || []).length,
+                revenue: appRevenue + finRevenue
+            });
+        } catch (err) {
+            console.error('Erro ao carregar dashboard:', err);
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchStats();
+    }, [fetchStats]);
+
+    // Real-time listeners for dashboard stats
+    useEffect(() => {
+        const appointmentChannel = supabase.channel('realtime-dashboard-appointments')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+                fetchStats();
+            })
+            .subscribe();
+
+        const customerChannel = supabase.channel('realtime-dashboard-customers')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
+                fetchStats();
+            })
+            .subscribe();
+
+        const financesChannel = supabase.channel('realtime-dashboard-finances')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'finances' }, () => {
+                fetchStats();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(appointmentChannel);
+            supabase.removeChannel(customerChannel);
+            supabase.removeChannel(financesChannel);
+        };
+    }, [fetchStats]);
 
     if (loading) return <div className="admin-loading">Carregando painel...</div>;
 
@@ -801,6 +889,16 @@ const AppointmentsTab = () => {
     }, [filters]);
 
     useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
+
+    // Real-time listener for appointments
+    useEffect(() => {
+        const channel = supabase.channel('realtime-appointments-list')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+                fetchAppointments();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchAppointments]);
 
     const updateStatus = async (id, status) => {
         await supabase.from('appointments').update({ status }).eq('id', id);
@@ -1027,7 +1125,7 @@ const SubscriptionsTab = () => {
                 notes: selectedSub.notes,
                 features_usage: selectedSub.features_usage,
                 start_month: selectedSub.start_month,
-                preferred_barber: selectedSub.preferred_barber
+                artist_id: selectedSub.artist_id
             })
             .eq('id', selectedSub.id);
 
@@ -1421,12 +1519,12 @@ const SubscriptionsTab = () => {
                             <label>Profissional Preferido</label>
                             <select
                                 className="app-form-control"
-                                value={selectedSub.preferred_barber || ''}
-                                onChange={e => setSelectedSub({ ...selectedSub, preferred_barber: e.target.value })}
+                                value={selectedSub.artist_id || ''}
+                                onChange={e => setSelectedSub({ ...selectedSub, artist_id: e.target.value })}
                             >
                                 <option value="">Qualquer um</option>
                                 {artists?.map(artist => (
-                                    <option key={artist.id} value={artist.name}>{artist.name}</option>
+                                    <option key={artist.id} value={artist.id}>{artist.name}</option>
                                 ))}
                             </select>
                         </div>
@@ -1572,6 +1670,16 @@ const CustomersTab = () => {
     }, [search]);
 
     useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+
+    // Real-time listener for customers
+    useEffect(() => {
+        const channel = supabase.channel('realtime-customers-list')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
+                fetchCustomers();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchCustomers]);
 
     const viewHistory = async (customer) => {
         setSelectedCustomer(customer);
@@ -1772,6 +1880,16 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
 
     useEffect(() => {
         fetchServices();
+    }, [fetchServices]);
+
+    // Real-time listener for services
+    useEffect(() => {
+        const channel = supabase.channel('realtime-services-list')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => {
+                fetchServices();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
     }, [fetchServices]);
 
     const openNew = () => {
@@ -1998,6 +2116,16 @@ const ArtistsTab = () => {
     }, []);
 
     useEffect(() => { fetchArtists(); }, [fetchArtists]);
+
+    // Real-time listener for artists
+    useEffect(() => {
+        const channel = supabase.channel('realtime-artists-list')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'artists' }, () => {
+                fetchArtists();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchArtists]);
 
     const openNew = () => { setEditing(null); setForm({ name: '', photo_url: '', instagram: '', specialty: '', active: true }); setShowModal(true); };
     const openEdit = (a) => { setEditing(a); setForm({ name: a.name, photo_url: a.photo_url || '', instagram: a.instagram || '', specialty: a.specialty || '', active: a.active ?? true }); setShowModal(true); };
@@ -2444,6 +2572,26 @@ const FinancesTab = () => {
 
     useEffect(() => { fetchFinances(); }, [fetchFinances]);
 
+    // Real-time listeners for finances (listens to appointments and finances tables)
+    useEffect(() => {
+        const appointmentChannel = supabase.channel('realtime-finances-appointments')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+                fetchFinances();
+            })
+            .subscribe();
+
+        const financesChannel = supabase.channel('realtime-finances-manual')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'finances' }, () => {
+                fetchFinances();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(appointmentChannel);
+            supabase.removeChannel(financesChannel);
+        };
+    }, [fetchFinances]);
+
     const exportToExcel = () => {
         if (recentTransactions.length === 0) return alert('Nenhum dado para exportar.');
 
@@ -2553,6 +2701,16 @@ const CategoriesTab = () => {
     }, []);
 
     useEffect(() => { fetchCategories(); }, [fetchCategories]);
+
+    // Real-time listener for gallery categories
+    useEffect(() => {
+        const channel = supabase.channel('realtime-gallery-categories')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_categories' }, () => {
+                fetchCategories();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchCategories]);
 
     const openNew = () => { setForm({ id: null, name: '' }); setShowModal(true); };
 
@@ -2708,6 +2866,16 @@ const PromotionInterestsTab = () => {
 
     useEffect(() => { fetchInterests(); }, [fetchInterests]);
 
+    // Real-time listener for promotion interests
+    useEffect(() => {
+        const channel = supabase.channel('realtime-promotion-interests')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'promotion_interests' }, () => {
+                fetchInterests();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchInterests]);
+
     const updateStatus = async (id, status) => {
         const { error } = await supabase.from('promotion_interests').update({ status }).eq('id', id);
         if (error) alert(error.message);
@@ -2722,8 +2890,10 @@ const PromotionInterestsTab = () => {
 
     const handleWhatsApp = (interest) => {
         const promoTitle = interest.promotions?.title || 'a promoção';
+        const phone = (interest.customer_phone || '').replace(/\D/g, '');
+        if (!phone) { alert('Este registo não tem um número de WhatsApp.'); return; }
         const msg = encodeURIComponent(`Olá ${interest.customer_name}! Recebemos seu interesse na oferta "${promoTitle}". Como posso ajudar?`);
-        window.open(`https://wa.me/${interest.customer_phone.replace(/\D/g, '')}?text=${msg}`, '_blank');
+        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
         if (interest.status === 'pending') {
             updateStatus(interest.id, 'contacted');
         }
@@ -2774,9 +2944,9 @@ const PromotionInterestsTab = () => {
                                     <div className="lead-offer-title">{item.promotions?.title || '---'}</div>
                                 </div>
 
-                                {item.preferred_barber && (
+                                {item.notes && (
                                     <div className="lead-pref-barber">
-                                        <span>Profissional:</span> {item.preferred_barber}
+                                        <span>Observação:</span> {item.notes}
                                     </div>
                                 )}
                             </div>
@@ -2847,6 +3017,16 @@ const GalleryTab = () => {
     }, []);
 
     useEffect(() => { fetchImages(); }, [fetchImages]);
+
+    // Real-time listener for gallery images
+    useEffect(() => {
+        const channel = supabase.channel('realtime-gallery-images')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery' }, () => {
+                fetchImages();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchImages]);
 
     const fetchImagesAndContext = () => {
         fetchImages();

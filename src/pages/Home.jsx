@@ -248,26 +248,45 @@ const Home = () => {
 
             {/* 📋 MODALS (Top Level) */}
             {isPlanModalOpen && (
-                <div className="app-modal-overlay fade-in">
-                    <div className="app-modal-content slide-up">
-                        <div className="app-modal-header">
+                <div className="modal-overlay fade-in">
+                    <div className="modal-content slide-up">
+                        <div className="modal-header">
                             <h3 className="app-title-font">ASSINAR: {selectedPlan?.title}</h3>
-                            <button className="app-modal-close" onClick={() => setIsPlanModalOpen(false)}>
+                            <button className="modal-close" onClick={() => setIsPlanModalOpen(false)}>
                                 <X size={24} />
                             </button>
                         </div>
-                        <p className="app-modal-subtitle">Seja um de nossos mensalistas e tenha benefícios exclusivos!</p>
+                        <p style={{marginBottom: '20px', color: '#888', fontSize: '0.9rem'}}>Seja um de nossos mensalistas e tenha benefícios exclusivos!</p>
 
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             try {
+                                // 1. Find or create customer
+                                let customerId;
+                                const { data: existing } = await supabase
+                                    .from('customers')
+                                    .select('id')
+                                    .eq('phone', subFormData.phone.trim());
+                                    
+                                if (existing && existing.length > 0) {
+                                    customerId = existing[0].id;
+                                } else {
+                                    const { data: newCust, error: newErr } = await supabase
+                                        .from('customers')
+                                        .insert([{ name: subFormData.name, phone: subFormData.phone }])
+                                        .select('id')
+                                        .single();
+                                    if (newErr) throw newErr;
+                                    customerId = newCust.id;
+                                }
+
+                                // 2. Insert subscription
                                 const { error } = await supabase.from('plan_subscriptions').insert([{
                                     plan_id: selectedPlan.id,
-                                    customer_name: subFormData.name,
-                                    customer_phone: subFormData.phone,
-                                    preferred_barber: subFormData.preferred_barber || null,
+                                    customer_id: customerId,
+                                    artist_id: subFormData.artist_id || null,
                                     start_month: subFormData.start_month,
-                                    observation: subFormData.observation,
+                                    notes: subFormData.observation,
                                     status: 'pending'
                                 }]);
 
@@ -281,13 +300,13 @@ const Home = () => {
                                 alert('Erro ao registrar interesse: ' + error.message);
                             }
                         }}>
-                            <div className="app-form">
+                            <div className="modal-form">
                                 <div className="form-row">
                                     <div className="form-group">
                                         <label>Seu Nome *</label>
                                         <input
                                             type="text"
-                                            className="app-form-control"
+                                            className="form-input"
                                             placeholder="Seu nome completo"
                                             value={subFormData.name}
                                             onChange={e => setSubFormData({ ...subFormData, name: e.target.value })}
@@ -298,7 +317,7 @@ const Home = () => {
                                         <label>WhatsApp (DDD + Número) *</label>
                                         <input
                                             type="tel"
-                                            className="app-form-control"
+                                            className="form-input"
                                             placeholder="(11) 99999-9999"
                                             value={subFormData.phone}
                                             onChange={e => setSubFormData({ ...subFormData, phone: e.target.value })}
@@ -311,13 +330,13 @@ const Home = () => {
                                     <div className="form-group">
                                         <label>Barbeiro de Preferência</label>
                                         <select
-                                            className="app-form-control"
-                                            value={subFormData.preferred_barber || ''}
-                                            onChange={e => setSubFormData({ ...subFormData, preferred_barber: e.target.value })}
+                                            className="form-input"
+                                            value={subFormData.artist_id || ''}
+                                            onChange={e => setSubFormData({ ...subFormData, artist_id: e.target.value })}
                                         >
                                             <option value="">Qualquer um</option>
                                             {artists?.map(artist => (
-                                                <option key={artist.id} value={artist.name}>{artist.name}</option>
+                                                <option key={artist.id} value={artist.id}>{artist.name}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -325,7 +344,7 @@ const Home = () => {
                                         <label>Mês de Início</label>
                                         <input
                                             type="text"
-                                            className="app-form-control"
+                                            className="form-input"
                                             value={subFormData.start_month}
                                             onChange={e => setSubFormData({ ...subFormData, start_month: e.target.value })}
                                             placeholder="Ex: Abril 2026"
@@ -337,15 +356,15 @@ const Home = () => {
                                     <label>Observações (Opcional)</label>
                                     <textarea
                                         rows="2"
-                                        className="app-form-control"
+                                        className="form-input"
                                         placeholder="Alguma restrição, alergia, ou dúvida específica?"
                                         value={subFormData.observation}
                                         onChange={e => setSubFormData({ ...subFormData, observation: e.target.value })}
                                     />
                                 </div>
 
-                                <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '4px' }}>
-                                    <button type="submit" className="btn-app-primary" style={{ padding: '14px 36px', width: 'auto', minWidth: '220px', fontSize: '0.95rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '10px', paddingBottom: '10px' }}>
+                                    <button type="submit" className="btn-app-primary" style={{ padding: '14px 20px', width: '100%', maxWidth: '300px', fontSize: '0.9rem' }}>
                                         Confirmar e Ir para o WhatsApp
                                     </button>
                                 </div>
@@ -356,15 +375,15 @@ const Home = () => {
             )}
 
             {isPromoModalOpen && (
-                <div className="app-modal-overlay fade-in">
-                    <div className="app-modal-content slide-up">
-                        <div className="app-modal-header">
+                <div className="modal-overlay fade-in">
+                    <div className="modal-content slide-up">
+                        <div className="modal-header">
                             <h3 className="app-title-font">QUERO ESTA OFERTA!</h3>
-                            <button className="app-modal-close" onClick={() => setIsPromoModalOpen(false)}>
+                            <button className="modal-close" onClick={() => setIsPromoModalOpen(false)}>
                                 <X size={24} />
                             </button>
                         </div>
-                        <p className="app-modal-subtitle">Confirme seus dados para aproveitar a oferta <strong>{selectedPromo?.title}</strong>.</p>
+                        <p style={{marginBottom: '20px', color: '#888', fontSize: '0.9rem'}}>Confirme seus dados para aproveitar a oferta <strong>{selectedPromo?.title}</strong>.</p>
 
                         <form onSubmit={async (e) => {
                             e.preventDefault();
@@ -373,7 +392,7 @@ const Home = () => {
                                     promotion_id: selectedPromo.id,
                                     customer_name: promoFormData.name,
                                     customer_phone: promoFormData.phone,
-                                    preferred_barber: promoFormData.preferred_barber || null,
+                                    notes: promoFormData.preferred_barber ? `Profissional de preferência: ${promoFormData.preferred_barber}` : null,
                                     status: 'pending'
                                 }]);
 
@@ -387,12 +406,12 @@ const Home = () => {
                                 alert('Erro ao registrar interesse: ' + error.message);
                             }
                         }}>
-                            <div className="app-form">
+                            <div className="modal-form">
                                 <div className="form-group">
                                     <label>Seu Nome *</label>
                                     <input
                                         type="text"
-                                        className="app-form-control"
+                                        className="form-input"
                                         placeholder="Como devemos lhe chamar?"
                                         value={promoFormData.name}
                                         onChange={e => setPromoFormData({ ...promoFormData, name: e.target.value })}
@@ -403,7 +422,7 @@ const Home = () => {
                                     <label>WhatsApp (DDD + Número) *</label>
                                     <input
                                         type="tel"
-                                        className="app-form-control"
+                                        className="form-input"
                                         placeholder="(11) 99999-9999"
                                         value={promoFormData.phone}
                                         onChange={e => setPromoFormData({ ...promoFormData, phone: e.target.value })}
@@ -413,7 +432,7 @@ const Home = () => {
                                 <div className="form-group" style={{ marginBottom: '15px' }}>
                                     <label>Profissional Preferido (Opcional)</label>
                                     <select
-                                        className="app-form-control"
+                                        className="form-input"
                                         value={promoFormData.preferred_barber || ''}
                                         onChange={e => setPromoFormData({ ...promoFormData, preferred_barber: e.target.value })}
                                     >
@@ -423,9 +442,11 @@ const Home = () => {
                                         ))}
                                     </select>
                                 </div>
-                                <button type="submit" className="btn-app-primary" style={{ width: '100%', marginTop: '5px' }}>
-                                    CONFIRMAR E IR PARA WHATSAPP
-                                </button>
+                                <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '10px', paddingBottom: '10px' }}>
+                                    <button type="submit" className="btn-app-primary" style={{ padding: '14px 20px', width: '100%', maxWidth: '300px', fontSize: '0.9rem' }}>
+                                        CONFIRMAR E IR PARA O WHATSAPP
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
