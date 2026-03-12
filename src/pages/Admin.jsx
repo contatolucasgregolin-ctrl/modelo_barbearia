@@ -914,7 +914,9 @@ const SubscriptionsTab = () => {
     }, []);
 
     const handleEdit = (sub) => {
-        setSelectedSub(sub);
+        // Inicializar com zeros se estiver vazio
+        const initialUsage = sub.features_usage || { cortes: 0, barbas: 0, bebidas: 0 };
+        setSelectedSub({ ...sub, features_usage: initialUsage });
         setIsEditModalOpen(true);
     };
 
@@ -922,7 +924,11 @@ const SubscriptionsTab = () => {
         e.preventDefault();
         const { error } = await supabase
             .from('plan_subscriptions')
-            .update({ status: selectedSub.status, notes: selectedSub.notes })
+            .update({
+                status: selectedSub.status,
+                notes: selectedSub.notes,
+                features_usage: selectedSub.features_usage
+            })
             .eq('id', selectedSub.id);
 
         if (!error) {
@@ -994,6 +1000,16 @@ const SubscriptionsTab = () => {
         setSubscriptions(prev => prev.filter(s => s.id !== id));
     };
 
+    const incrementUsage = (key, delta = 1) => {
+        setSelectedSub(prev => ({
+            ...prev,
+            features_usage: {
+                ...prev.features_usage,
+                [key]: Math.max(0, (prev.features_usage[key] || 0) + delta)
+            }
+        }));
+    };
+
     return (
         <div className="fade-in">
             <div className="admin-section-header">
@@ -1056,8 +1072,24 @@ const SubscriptionsTab = () => {
                                             )}
                                         </div>
                                     </td>
-                                    <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#888' }}>
-                                        {sub.notes || '-'}
+                                    <td style={{ maxWidth: '200px', fontSize: '0.85rem' }}>
+                                        {/* Display usage badge if available */}
+                                        {sub.features_usage && sub.status === 'active' && (
+                                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                                <span style={{ background: 'var(--color-bg-alt)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem' }}>
+                                                    ✂️ Cortes: {sub.features_usage.cortes || 0}
+                                                </span>
+                                                <span style={{ background: 'var(--color-bg-alt)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem' }}>
+                                                    🧔 Barbas: {sub.features_usage.barbas || 0}
+                                                </span>
+                                                <span style={{ background: 'var(--color-bg-alt)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem' }}>
+                                                    🥃 Bebidas: {sub.features_usage.bebidas || 0}
+                                                </span>
+                                            </div>
+                                        )}
+                                        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#888' }}>
+                                            {sub.notes || '-'}
+                                        </div>
                                     </td>
                                     <td style={{ textAlign: 'right' }}>
                                         {sub.status === 'pending' && (
@@ -1113,16 +1145,48 @@ const SubscriptionsTab = () => {
                             </select>
                         </div>
                         <div className="admin-form-group">
-                            <label>Controle e Anotações Gerais</label>
+                            <label>Controle de Consumo (Mês Atual)</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--color-bg-alt)', padding: '15px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>✂️ Cortes Utilizados</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('cortes', -1)}>-</button>
+                                        <span style={{ fontWeight: 800, width: '20px', textAlign: 'center' }}>{selectedSub.features_usage?.cortes || 0}</span>
+                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('cortes', 1)}>+</button>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>🧔 Barbas Utilizadas</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('barbas', -1)}>-</button>
+                                        <span style={{ fontWeight: 800, width: '20px', textAlign: 'center' }}>{selectedSub.features_usage?.barbas || 0}</span>
+                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('barbas', 1)}>+</button>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>🥃 Bebidas Cortesia</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('bebidas', -1)}>-</button>
+                                        <span style={{ fontWeight: 800, width: '20px', textAlign: 'center' }}>{selectedSub.features_usage?.bebidas || 0}</span>
+                                        <button type="button" className="admin-btn-secondary" style={{ padding: '4px 10px' }} onClick={() => incrementUsage('bebidas', 1)}>+</button>
+                                    </div>
+                                </div>
+                                <small style={{ color: '#888', marginTop: '5px' }}>
+                                    Atente-se aos limites definidos no plano (ex: VIP = 2 cortes, 1 barba).
+                                </small>
+                            </div>
+                        </div>
+                        <div className="admin-form-group">
+                            <label>Anotações Gerais</label>
                             <textarea
                                 className="admin-input"
-                                rows="5"
-                                placeholder="Ex: Cliente fechou pacote de 10h. Hoje fez 4h. Restam 6h. Braço esquerdo."
+                                rows="3"
+                                placeholder="Notas adicionais sobre preferências, alergias, etc."
                                 value={selectedSub.notes || ''}
                                 onChange={e => setSelectedSub({ ...selectedSub, notes: e.target.value })}
                             />
                             <small style={{ color: '#888', display: 'block', marginTop: '4px' }}>
-                                Use este campo para registrar consumo de horas do plano, observações de projeto, etc.
+                                Fica registrado todo o histórico da assinatura na linha do tempo.
                             </small>
                         </div>
                         <button type="submit" className="admin-btn-primary" style={{ width: '100%', marginTop: '16px' }}>Salvar Alterações</button>

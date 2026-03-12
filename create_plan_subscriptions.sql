@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS public.plan_subscriptions (
     notes TEXT,
     activated_at TIMESTAMP WITH TIME ZONE,
     expires_at TIMESTAMP WITH TIME ZONE,
+    features_usage JSONB DEFAULT '{}'::jsonb,
     CONSTRAINT status_check CHECK (status IN ('pending', 'active', 'completed', 'cancelled'))
 );
 
