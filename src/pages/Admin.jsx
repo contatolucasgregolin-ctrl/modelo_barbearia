@@ -2,13 +2,52 @@ import { useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { SiteContext } from '../context/SiteContext';
 import { supabase, uploadStorageFile, compressToWebP } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import {
     LayoutDashboard, CalendarDays, Scissors, Users, Settings, LogOut,
     Plus, Trash2, Save, Pencil, X, Check, Ban, Trophy, Bell, RefreshCw, ChevronDown, User, TrendingUp, Image as ImageIcon, Tag, Eye,
-    ChevronLeft, ChevronRight, Maximize2, Sun, Moon, Download, Megaphone, Star, MessageCircle
+    ChevronLeft, ChevronRight, Maximize2, Sun, Moon, Download, Megaphone, Star, MessageCircle,
+    Package, Sparkles, Brain, Link2, Edit2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import '../styles/Admin.css';
+
+// ── New Modular Components ──
+import StockTab from './admin/StockTab';
+import ServiceProductsManager from './admin/ServiceProductsManager';
+import DashboardTab from './admin/DashboardTab';
+import FinancesTab from './admin/FinancesTab';
+import BarberUsageModal from './admin/BarberUsageModal';
+import AcademyTab from './admin/AcademyTab';
+import AIPlansPanel from './admin/AIPlansPanel';
+import AIPromotionsPanel from './admin/AIPromotionsPanel';
+import OnboardingTour from '../components/OnboardingTour';
+import MiniTutorial from '../components/MiniTutorial';
+import Swal from 'sweetalert2';
+
+const myConfirm = async (msg) => {
+  const result = await Swal.fire({
+    title: 'Confirmação',
+    text: msg,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Sim',
+    cancelButtonText: 'Cancelar',
+    background: '#1e2433', // Combinando com o painel escuro
+    color: '#f8fafc',
+    iconColor: '#ff7a00',
+    customClass: {
+      popup: 'admin-swal-popup',
+      title: 'admin-swal-title',
+      confirmButton: 'admin-swal-confirm',
+      cancelButton: 'admin-swal-cancel',
+    },
+    buttonsStyling: false
+  });
+  return result.isConfirmed;
+};
+
+
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const TODAY = new Date().toISOString().split('T')[0];
@@ -24,7 +63,7 @@ const STATUS_LABELS = {
     expired: { label: 'Expirado', color: '#f87171' },
 };
 
-const StatusBadge = ({ status }) => {
+export const StatusBadge = ({ status }) => {
     const s = STATUS_LABELS[status] || STATUS_LABELS.pending;
     return (
         <span style={{
@@ -44,7 +83,7 @@ const StatCard = ({ icon, label, value, color = 'var(--color-primary)' }) => (
     </div>
 );
 
-const Modal = ({ title, onClose, children }) => (
+export const Modal = ({ title, onClose, children }) => (
     <div className="admin-modal-overlay" onClick={onClose}>
         <div className="admin-modal glass-panel" onClick={e => e.stopPropagation()}>
             <div className="admin-modal-header">
@@ -63,12 +102,14 @@ const TABS = [
     { id: 'subscriptions', icon: <User size={18} />, label: 'Mensalistas' },
     { id: 'customers', icon: <Users size={18} />, label: 'Clientes' },
     { id: 'services', icon: <Scissors size={18} />, label: 'Serviços' },
+    { id: 'stock', icon: <Package size={18} />, label: 'Estoque' },
     { id: 'planspromos', icon: <Megaphone size={18} />, label: 'Gerenciar Promoções' },
     { id: 'promo_interests', icon: <Bell size={18} />, label: 'Interessados / Ofertas' },
     { id: 'artists', icon: <Trophy size={18} />, label: 'Profissionais' },
     { id: 'categories', icon: <Tag size={18} />, label: 'Categorias' },
     { id: 'gallery', icon: <ImageIcon size={18} />, label: 'Galeria' },
     { id: 'finances', icon: <TrendingUp size={18} />, label: 'Financeiro' },
+    { id: 'academy', icon: <Sparkles size={18} />, label: 'StudioFlow Academy' },
     { id: 'settings', icon: <Settings size={18} />, label: 'Configurações' },
 ];
 
@@ -78,8 +119,9 @@ const TABS = [
 // ══════════════════════════════════════════════════════════════════════════════
 const Admin = () => {
     const { siteData, updateSiteData, theme, toggleTheme } = useContext(SiteContext);
+    const { isAdmin, role } = useAuth();
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState('dashboard');
+    const [activeTab, setActiveTab] = useState(isAdmin ? 'dashboard' : 'appointments');
     const [notificationQueue, setNotificationQueue] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [showBellPanel, setShowBellPanel] = useState(false);
@@ -99,80 +141,144 @@ const Admin = () => {
     }, []);
 
     useEffect(() => {
+        // Reset scroll indications on mount
         handleScroll();
         window.addEventListener('resize', handleScroll);
         return () => window.removeEventListener('resize', handleScroll);
     }, [handleScroll]);
 
-    // Supabase Real-time listener for New Appointments AND Subscriptions
+    // ─── CENTRALIZED DATA CACHE ───
+    const [cachedData, setCachedData] = useState({
+        appointments: [],
+        services: [],
+        artists: [],
+        plans: [],
+        customers: [],
+        finances: [],
+        activeSubs: 0,
+        lastUpdate: Date.now()
+    });
+    const [globalLoading, setGlobalLoading] = useState(true);
+
+    const refreshAllData = useCallback(async () => {
+        console.log("[Admin] Iniciando carregamento de dados...");
+        
+        try {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const dateStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+            const [appRes, servRes, artRes, plansRes, finRes, subRes] = await Promise.all([
+                supabase.from('appointments').select('*, customers(name, phone), services(name), artists(name)').order('created_at', { ascending: false }).limit(200),
+                supabase.from('services').select('*').order('name'),
+                supabase.from('artists').select('*').order('name'),
+                supabase.from('plans').select('*').order('price'),
+                supabase.from('finances').select('*').eq('type', 'income').gte('date', dateStr),
+                supabase.from('plan_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active')
+            ]);
+
+            // Log detalhado de erros para debug
+            const results = { appRes, servRes, artRes, plansRes, finRes, subRes };
+            Object.entries(results).forEach(([key, res]) => {
+                if (res.error) {
+                    console.error(`[Admin] Erro em ${key}:`, res.error.message, res.error.code);
+                }
+            });
+
+            setCachedData(prev => ({
+                ...prev,
+                appointments: appRes.data || [],
+                services: servRes.data || [],
+                artists: artRes.data || [],
+                plans: plansRes.data || [],
+                finances: finRes.data || [],
+                activeSubs: subRes.count || 0,
+                lastUpdate: Date.now()
+            }));
+
+            console.log("[Admin] Dados carregados:", {
+                appointments: (appRes.data || []).length,
+                services: (servRes.data || []).length,
+                artists: (artRes.data || []).length,
+                plans: (plansRes.data || []).length,
+                finances: (finRes.data || []).length,
+            });
+        } catch (err) {
+            console.error("[Admin] Erro crítico no carregamento:", err);
+        } finally {
+            setGlobalLoading(false);
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     useEffect(() => {
-        const appointmentChannel = supabase.channel('admin-appointments-notify')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' }, payload => {
-                // Play notification sound
-                try {
-                    const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-30.mp3');
-                    audio.volume = 0.5;
-                    audio.play();
-                } catch (e) { console.warn("Audio autoplay blocked"); }
+        if (isAdmin) refreshAllData();
+    }, [isAdmin, refreshAllData]);
 
-                // Add to persistent notification queue (accumulates multiple)
-                const id = Date.now();
-                const newNotif = {
-                    id,
-                    type: 'appointment',
-                    title: '🔔 Novo Agendamento!',
-                    message: 'Um novo pedido de agendamento foi recebido. Confira na aba Agendamentos.'
-                };
-                setNotificationQueue(q => [...q, newNotif]);
-                setUnreadCount(c => c + 1);
-                setActiveAlert(newNotif);
+    // Supabase Real-time listener UNIFICADO (Um canal para as ouvir todas as mudanças)
+    useEffect(() => {
+        if (!isAdmin) return;
+
+        console.log("[Admin] Iniciando Master Realtime Channel");
+        
+        const playNotificationSound = () => {
+            try {
+                const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                audio.volume = 1.0;
+                audio.play().catch(e => console.warn("Audio bloqueado pelo navegador", e));
+            } catch(e) { console.warn("Erro no audio", e); }
+        };
+
+        const masterChannel = supabase.channel('admin-master-sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, payload => {
+                console.log("Sync: Mudança em agendamentos", payload.eventType, payload);
+                if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
+                    playNotificationSound();
+                    const notif = { id: Date.now(), title: '🔔 Novo Agendamento!', message: `Você recebeu um novo pedido de agendamento.`, type: 'appointment' };
+                    setNotificationQueue(q => {
+                        // Evita duplicatas se o evento disparar duas vezes rápido
+                        if (q.some(n => n.message === notif.message && Date.now() - n.id < 5000)) return q;
+                        return [notif, ...q];
+                    });
+                    setUnreadCount(c => c + 1);
+                    setActiveAlert(notif);
+                }
+                refreshAllData('appointments');
             })
-            .subscribe();
-
-        const subscriptionChannel = supabase.channel('admin-subscriptions-notify')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plan_subscriptions' }, payload => {
-                try {
-                    const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-30.mp3');
-                    audio.volume = 0.5;
-                    audio.play();
-                } catch (e) { console.warn("Audio autoplay blocked"); }
-
-                const id = Date.now();
-                const newNotif = {
-                    id,
-                    type: 'subscription',
-                    title: '⭐ Nova Assinatura de Plano!',
-                    message: 'Um cliente preencheu os dados para assinar um plano. Confira na aba Mensalistas.'
-                };
-                setNotificationQueue(q => [...q, newNotif]);
-                setUnreadCount(c => c + 1);
-                setActiveAlert(newNotif);
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_subscriptions' }, payload => {
+                console.log("Sync: Mudança em planos", payload.eventType, payload);
+                if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'active')) {
+                    playNotificationSound();
+                    const notif = { id: Date.now() + 1, title: '⭐ Nova Assinatura!', message: 'Um cliente aderiu a um clube de assinaturas!', type: 'subscription' };
+                    setNotificationQueue(q => {
+                        if (q.some(n => n.message === notif.message && Date.now() - n.id < 5000)) return q;
+                        return [notif, ...q];
+                    });
+                    setUnreadCount(c => c + 1);
+                    setActiveAlert(notif);
+                }
+                refreshAllData();
             })
-            .subscribe();
-
-        const promoInterestChannel = supabase
-            .channel('promo_interests_realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'promotion_interests' }, (payload) => {
-                const newInterest = payload.new;
-                const notif = {
-                    id: Date.now(),
-                    type: 'promo_interest',
-                    title: 'Novo Interesse em Promoção! 🎁',
-                    message: `${newInterest.customer_name} quer aproveitar uma oferta!`,
-                    data: newInterest
-                };
-                setNotificationQueue(q => [notif, ...q]);
-                setUnreadCount(prev => prev + 1);
-                setActiveAlert(notif);
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'promotion_interests' }, payload => {
+                console.log("Sync: Mudança em promoções", payload.eventType, payload);
+                if (payload.eventType === 'INSERT') {
+                    playNotificationSound();
+                    const notif = { id: Date.now() + 2, title: '🎁 Novo Interesse!', message: 'Alguém clicou em uma promoção!', type: 'promo_interest' };
+                    setNotificationQueue(q => {
+                        if (q.some(n => n.message === notif.message && Date.now() - n.id < 5000)) return q;
+                        return [notif, ...q];
+                    });
+                    setUnreadCount(c => c + 1);
+                    setActiveAlert(notif);
+                }
+                refreshAllData();
             })
             .subscribe();
 
         return () => {
-            supabase.removeChannel(appointmentChannel);
-            supabase.removeChannel(subscriptionChannel);
-            supabase.removeChannel(promoInterestChannel);
+            console.log("[Admin] Removendo Master Realtime Channel");
+            supabase.removeChannel(masterChannel);
         };
-    }, []);
+    }, [isAdmin, refreshAllData]);
 
     const scrollNav = (direction) => {
         if (navRef.current) {
@@ -214,20 +320,32 @@ const Admin = () => {
         setMobileMenuOpen(false);
     };
 
+    // Get current tab label for topbar
+    const currentTabLabel = TABS.find(t => t.id === activeTab)?.label || 'Dashboard';
+
+    // Filter tabs based on role
+    const visibleTabs = TABS.filter(tab => {
+        if (isAdmin) return true;
+        const allowedForBarber = ['appointments', 'customers', 'academy', 'settings'];
+        return allowedForBarber.includes(tab.id);
+    });
+
     return (
         <div className="admin-shell" onClick={() => setShowBellPanel(false)}>
+            <OnboardingTour />
+
             {/* ── Central Pop-up Alert ── */}
             {activeAlert && (
-                <div className="admin-central-alert-overlay fade-in">
-                    <div className="admin-central-alert glass-panel bounce-in">
-                        <div className="alert-icon-main">
-                            {activeAlert.type === 'subscription' ? <Star size={40} className="neon-text" /> :
-                                activeAlert.type === 'promo_interest' ? <Megaphone size={40} className="neon-text" /> :
-                                    <Bell size={40} className="neon-text" />}
+                <div className="admin-notification-overlay fade-in">
+                    <div className="admin-notification-popup bounce-in">
+                        <div className="notification-icon-large">
+                            {activeAlert.type === 'subscription' ? <Star size={40} /> :
+                                activeAlert.type === 'promo_interest' ? <Megaphone size={40} /> :
+                                    <Bell size={40} />}
                         </div>
-                        <h3>{activeAlert.title}</h3>
-                        <p>{activeAlert.message}</p>
-                        <div className="alert-actions">
+                        <h3 className="notification-title">{activeAlert.title}</h3>
+                        <p className="notification-message">{activeAlert.message}</p>
+                        <div className="notification-actions">
                             <button className="admin-btn-secondary" onClick={() => setActiveAlert(null)}>Fechar</button>
                             <button className="admin-btn-primary neon-glow" onClick={() => {
                                 handleNotificationClick(activeAlert);
@@ -238,137 +356,153 @@ const Admin = () => {
                 </div>
             )}
 
+            {/* ── Mobile Sidebar Overlay ── */}
+            <div className={`mobile-sidebar-overlay ${mobileMenuOpen ? 'open' : ''}`} onClick={() => setMobileMenuOpen(false)} />
 
-            {/* ── Top Bar ── */}
-            <header className="admin-topbar">
-                <div className="admin-topbar-inner">
-                    <div className="admin-topbar-left">
-                        <span className="admin-topbar-title">Painel Admin</span>
-                        <div className="admin-nav-wrapper">
-                            {showLeftScroll && (
-                                <button className="nav-scroll-btn left" onClick={() => scrollNav('left')}>
-                                    <ChevronLeft size={18} />
-                                </button>
-                            )}
-                            <div className={`nav-fade-mask ${showLeftScroll ? 'has-left' : ''} ${showRightScroll ? 'has-right' : ''}`}>
-                                <nav className="admin-desktop-nav" ref={navRef} onScroll={handleScroll}>
-                                    {TABS.map(tab => (
-                                        <button
-                                            key={tab.id}
-                                            className={`nav-link ${activeTab === tab.id ? 'active' : ''}`}
-                                            onClick={() => handleTabChange(tab.id)}
-                                        >
-                                            {tab.icon}
-                                            <span>{tab.label}</span>
-                                        </button>
-                                    ))}
-                                </nav>
-                            </div>
-                            {showRightScroll && (
-                                <button className="nav-scroll-btn right" onClick={() => scrollNav('right')}>
-                                    <ChevronRight size={18} />
-                                </button>
-                            )}
-                        </div>
+            {/* ═══ SIDEBAR ═══ */}
+            <aside className={`admin-sidebar ${mobileMenuOpen ? 'open' : ''}`}>
+                <div className="sidebar-brand">
+                    <div className="sidebar-brand-name">{siteData?.menuTitle || 'StudioFlow'}</div>
+                    <div className="sidebar-brand-sub">Management Suite</div>
+                </div>
+
+                <nav className="sidebar-nav">
+                    {visibleTabs.map(tab => (
+                        <button
+                            key={tab.id}
+                            className={`sidebar-nav-item ${activeTab === tab.id ? 'active' : ''}`}
+                            onClick={() => handleTabChange(tab.id)}
+                        >
+                            {tab.icon}
+                            <span>{tab.label}</span>
+                        </button>
+                    ))}
+                </nav>
+
+                <div className="sidebar-footer">
+                    <button className="sidebar-new-session" onClick={() => { handleTabChange('appointments'); }}>
+                        <Plus size={18} /> Nova Sessão
+                    </button>
+                    <div className="sidebar-links">
+                        <button onClick={() => handleTabChange('academy')}><Sparkles size={12} /> Academy</button>
+                        <button onClick={() => handleTabChange('settings')}><Settings size={12} /> Config</button>
                     </div>
-                    <div className="admin-topbar-right">
-                        {/* Bell Button with Badge */}
-                        <div style={{ position: 'relative', display: 'inline-flex' }}>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowBellPanel(!showBellPanel);
-                                }}
-                                className={`theme-toggle-btn ${showBellPanel ? 'active' : ''}`}
-                                title={unreadCount > 0 ? `${unreadCount} notificações não lidas` : 'Notificações'}
-                                style={{ marginRight: '4px', position: 'relative' }}
-                            >
-                                <Bell size={20} />
-                                {unreadCount > 0 && (
-                                    <span style={{
-                                        position: 'absolute', top: '-4px', right: '-4px',
-                                        background: '#ef4444', color: '#fff',
-                                        fontSize: '0.6rem', fontWeight: 800,
-                                        padding: '1px 5px', borderRadius: '10px',
-                                        lineHeight: '14px', minWidth: '16px',
-                                        textAlign: 'center', pointerEvents: 'none'
-                                    }}>
-                                        {unreadCount > 9 ? '9+' : unreadCount}
-                                    </span>
-                                )}
-                            </button>
+                </div>
+            </aside>
 
-                            {/* ── Bell Dropdown Panel ── */}
-                            {showBellPanel && (
-                                <div className="admin-bell-panel glass-panel fade-in" onClick={e => e.stopPropagation()}>
-                                    <div className="bell-panel-header">
-                                        <h4>Notificações Recentes</h4>
-                                        {notificationQueue.length > 0 && (
-                                            <button onClick={() => { setNotificationQueue([]); setUnreadCount(0); }} className="text-primary" style={{ fontSize: '0.75rem' }}>Limpar Todas</button>
-                                        )}
-                                    </div>
-                                    <div className="bell-panel-content">
-                                        {notificationQueue.length === 0 ? (
-                                            <div className="bell-empty">Nenhuma nova notificação</div>
-                                        ) : (
-                                            notificationQueue.map((notif, idx) => (
+            {/* ═══ MAIN AREA ═══ */}
+            <div className="admin-main">
+                {/* ── Top Bar ── */}
+                <header className="admin-topbar">
+                    <div className="admin-topbar-inner">
+                        <div className="admin-topbar-left">
+                            <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+                                {mobileMenuOpen ? <X size={22} /> : <LayoutDashboard size={22} />}
+                            </button>
+                            <span className="admin-topbar-title">{currentTabLabel}</span>
+                        </div>
+                        <div className="admin-topbar-right">
+                            <div className="server-status">
+                                <span className="server-status-label">Status</span>
+                                <span className="server-status-value">
+                                    <span className="status-dot pulse-dot"></span>
+                                    Online
+                                </span>
+                            </div>
+
+                            {/* Bell */}
+                            <div style={{ position: 'relative', display: 'inline-flex' }}>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setShowBellPanel(!showBellPanel); }}
+                                    className={`theme-toggle-btn ${showBellPanel ? 'active' : ''}`}
+                                    title={unreadCount > 0 ? `${unreadCount} notificações` : 'Notificações'}
+                                    style={{ position: 'relative' }}
+                                >
+                                    <Bell size={18} />
+                                    {unreadCount > 0 && (
+                                        <span style={{
+                                            position: 'absolute', top: '-4px', right: '-4px',
+                                            background: '#ef4444', color: '#fff',
+                                            fontSize: '0.6rem', fontWeight: 800,
+                                            padding: '1px 5px', borderRadius: '10px',
+                                            lineHeight: '14px', minWidth: '16px',
+                                            textAlign: 'center', pointerEvents: 'none'
+                                        }}>
+                                            {unreadCount > 9 ? '9+' : unreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                                {showBellPanel && (
+                                    <div className="admin-bell-panel glass-panel fade-in" onClick={e => e.stopPropagation()}>
+                                        <div className="bell-panel-header">
+                                            <h4>Notificações</h4>
+                                            {notificationQueue.length > 0 && (
+                                                <button onClick={() => { setNotificationQueue([]); setUnreadCount(0); }} className="text-primary" style={{ fontSize: '0.75rem' }}>Limpar</button>
+                                            )}
+                                        </div>
+                                        <div className="bell-panel-content">
+                                            {notificationQueue.length === 0 ? (
+                                                <div className="bell-empty">Nenhuma nova notificação</div>
+                                            ) : notificationQueue.map((notif, idx) => (
                                                 <div key={idx} className="bell-item" onClick={() => handleNotificationClick(notif)}>
-                                                    <div className="bell-item-icon">
-                                                        <Bell size={16} />
-                                                    </div>
+                                                    <div className="bell-item-icon"><Bell size={14} /></div>
                                                     <div className="bell-item-text">
                                                         <div className="bell-item-title">{notif.title}</div>
                                                         <div className="bell-item-msg">{notif.message}</div>
                                                     </div>
                                                 </div>
-                                            ))
-                                        )}
+                                            ))}
+                                        </div>
                                     </div>
+                                )}
+                            </div>
+
+                            <button onClick={toggleTheme} className="theme-toggle-btn" title="Alternar Tema">
+                                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                            </button>
+                            <button onClick={handleLogout} title="Sair" className="theme-toggle-btn" style={{ color: '#ef4444' }}>
+                                <LogOut size={18} />
+                            </button>
+                        </div>
+                    </div>
+                </header>
+
+                {/* ── Tab Content ── */}
+                <main className="admin-content">
+                    {globalLoading ? (
+                        <div className="admin-loading">
+                            <div className="admin-loading-spinner"></div>
+                            <p>Sincronizando dados inteligentes...</p>
+                        </div>
+                    ) : (
+                        <>
+                            {(activeTab === 'dashboard' && isAdmin) && <DashboardTab cachedData={cachedData} refreshAll={refreshAllData} />}
+                            {activeTab === 'appointments' && <AppointmentsTab activeTab={activeTab} cachedData={cachedData} refreshAll={refreshAllData} />}
+                            {activeTab === 'subscriptions' && <SubscriptionsTab cachedData={cachedData} refreshAll={refreshAllData} />}
+                            {activeTab === 'academy' && <AcademyTab />}
+                            {activeTab === 'customers' && <CustomersTab cachedData={cachedData} refreshAll={refreshAllData} />}
+                            {(activeTab === 'services' && isAdmin) && <ServicesTab services={cachedData.services} loading={globalLoading} refresh={refreshAllData} updateSiteData={updateSiteData} />}
+                            {(activeTab === 'artists' && isAdmin) && <ArtistsTab artists={cachedData.artists} loading={globalLoading} refresh={refreshAllData} />}
+                            {(activeTab === 'categories' && isAdmin) && <CategoriesTab cachedData={cachedData} refreshAll={refreshAllData} />}
+                            {(activeTab === 'gallery' && isAdmin) && <GalleryTab cachedData={cachedData} refreshAll={refreshAllData} />}
+                            {(activeTab === 'finances' && isAdmin) && <FinancesTab cachedData={cachedData} refreshAll={refreshAllData} />}
+                            {(activeTab === 'stock' && isAdmin) && <StockTab cachedData={cachedData} refreshAll={refreshAllData} />}
+                            {activeTab === 'settings' && <SettingsTab siteData={siteData || {}} updateSiteData={updateSiteData} />}
+                            {(activeTab === 'planspromos' && isAdmin) && <PlansPromosTab cachedData={cachedData} refreshAll={refreshAllData} />}
+                            {(activeTab === 'promo_interests' && isAdmin) && <PromotionInterestsTab cachedData={cachedData} refreshAll={refreshAllData} />}
+
+                            {!isAdmin && ['dashboard', 'services', 'artists', 'categories', 'gallery', 'finances', 'stock', 'planspromos', 'promo_interests', 'subscriptions'].includes(activeTab) && (
+                                <div style={{ textAlign: 'center', padding: '40px' }}>
+                                    <Ban size={48} color="#ef4444" style={{ marginBottom: '16px' }} />
+                                    <h3>Acesso Restrito</h3>
+                                    <p>Apenas o administrador da barbearia tem acesso a esta funcionalidade.</p>
+                                    <button className="admin-btn-primary" style={{ marginTop: '20px' }} onClick={() => setActiveTab('appointments')}>Ir para Agendamentos</button>
                                 </div>
                             )}
-                        </div>
-                        <button onClick={toggleTheme} className="theme-toggle-btn" title="Alternar Tema" style={{ marginRight: '8px' }}>
-                            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                        </button>
-                        <button className="admin-logout-btn" onClick={handleLogout} title="Sair" style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '8px' }}>
-                            <LogOut size={20} />
-                        </button>
-                        <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-                            {mobileMenuOpen ? <X size={24} /> : <ChevronDown size={24} />}
-                        </button>
-                    </div>
-                </div>
-            </header>
-
-            {/* ── Mobile Navigation ── */}
-            <nav className={`mobile-navigation ${mobileMenuOpen ? 'open' : ''}`}>
-                {TABS.map(tab => (
-                    <button
-                        key={tab.id}
-                        className={`nav-link ${activeTab === tab.id ? 'active' : ''}`}
-                        onClick={() => handleTabChange(tab.id)}
-                    >
-                        {tab.icon}
-                        <span>{tab.label}</span>
-                    </button>
-                ))}
-            </nav>
-
-            {/* ── Tab Content ── */}
-            <main className="admin-content">
-                {activeTab === 'dashboard' && <DashboardTab />}
-                {activeTab === 'appointments' && <AppointmentsTab />}
-                {activeTab === 'subscriptions' && <SubscriptionsTab />}
-                {activeTab === 'customers' && <CustomersTab />}
-                {activeTab === 'services' && <ServicesTab siteData={siteData} updateSiteData={updateSiteData} />}
-                {activeTab === 'artists' && <ArtistsTab siteData={siteData} updateSiteData={updateSiteData} />}
-                {activeTab === 'categories' && <CategoriesTab />}
-                {activeTab === 'gallery' && <GalleryTab />}
-                {activeTab === 'finances' && <FinancesTab />}
-                {activeTab === 'settings' && <SettingsTab siteData={siteData} updateSiteData={updateSiteData} />}
-                {activeTab === 'planspromos' && <PlansPromosTab />}
-                {activeTab === 'promo_interests' && <PromotionInterestsTab />}
-            </main>
+                        </>
+                    )}
+                </main>
+            </div>
         </div>
     );
 };
@@ -376,10 +510,11 @@ const Admin = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 // PLANS & PROMOTIONS TAB
 // ══════════════════════════════════════════════════════════════════════════════
-const PlansPromosTab = () => {
-    const [plans, setPlans] = useState([]);
+export const PlansPromosTab = ({ cachedData, refreshAll }) => {
+    const [viewMode, setViewMode] = useState('manual');
+    const [plans, setPlans] = useState(cachedData?.plans || []);
     const [promotions, setPromotions] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!cachedData?.plans);
 
     // Plan Modal
     const [showPlanModal, setShowPlanModal] = useState(false);
@@ -394,38 +529,16 @@ const PlansPromosTab = () => {
     const [confirmDeletePromoId, setConfirmDeletePromoId] = useState(null);
     const [confirmDeletePlanId, setConfirmDeletePlanId] = useState(null);
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        const [plansRes, promosRes] = await Promise.all([
-            supabase.from('plans').select('*').order('price'),
-            supabase.from('promotions').select('*').order('created_at', { ascending: false })
-        ]);
-        setPlans(plansRes.data || []);
-        setPromotions(promosRes.data || []);
+    const fetchPromos = useCallback(async () => {
+        const { data } = await supabase.from('promotions').select('*').order('created_at', { ascending: false });
+        setPromotions(data || []);
         setLoading(false);
     }, []);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
-
-    // Real-time listeners for plans and promotions
     useEffect(() => {
-        const plansChannel = supabase.channel('realtime-plans')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'plans' }, () => {
-                fetchData();
-            })
-            .subscribe();
-
-        const promosChannel = supabase.channel('realtime-promotions')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'promotions' }, () => {
-                fetchData();
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(plansChannel);
-            supabase.removeChannel(promosChannel);
-        };
-    }, [fetchData]);
+        if (cachedData?.plans) setPlans(cachedData.plans);
+        fetchPromos();
+    }, [cachedData, fetchPromos]);
 
     const openPlan = (plan = null) => {
         if (plan) {
@@ -545,6 +658,35 @@ const PlansPromosTab = () => {
 
     return (
         <div className="fade-in">
+            {/* ── Mode Toggle ── */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', justifyContent: 'center' }}>
+                <button 
+                    onClick={() => setViewMode('manual')}
+                    className={`nav-link ${viewMode === 'manual' ? 'active' : ''}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', borderRadius: '12px', border: '1px solid', borderColor: viewMode === 'manual' ? 'var(--color-primary)' : 'var(--color-border)', background: viewMode === 'manual' ? 'rgba(255,122,0,0.1)' : 'rgba(255,255,255,0.05)', color: viewMode === 'manual' ? 'var(--color-primary)' : '#aaa', cursor: 'pointer' }}
+                >
+                    <Megaphone size={18} /> Gestão Manual
+                </button>
+                <button 
+                    onClick={() => setViewMode('ai_promos')}
+                    className={`nav-link ${viewMode === 'ai_promos' ? 'active' : ''}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', borderRadius: '12px', border: '1px solid', borderColor: viewMode === 'ai_promos' ? '#f59e0b' : 'var(--color-border)', background: viewMode === 'ai_promos' ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.05)', color: viewMode === 'ai_promos' ? '#f59e0b' : '#aaa', cursor: 'pointer' }}
+                >
+                    <Sparkles size={18} /> IA: Promoções Prontas
+                </button>
+                <button 
+                    onClick={() => setViewMode('ai_plans')}
+                    className={`nav-link ${viewMode === 'ai_plans' ? 'active' : ''}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', borderRadius: '12px', border: '1px solid', borderColor: viewMode === 'ai_plans' ? '#8b5cf6' : 'var(--color-border)', background: viewMode === 'ai_plans' ? 'rgba(139,92,246,0.1)' : 'rgba(255,255,255,0.05)', color: viewMode === 'ai_plans' ? '#8b5cf6' : '#aaa', cursor: 'pointer' }}
+                >
+                    <Brain size={18} /> IA: Planos VIP
+                </button>
+            </div>
+
+            {viewMode === 'ai_promos' && <AIPromotionsPanel />}
+            {viewMode === 'ai_plans' && <AIPlansPanel />}
+
+            <div style={{ display: viewMode === 'manual' ? 'block' : 'none' }}>
             {/* Promoções Section */}
             <div className="admin-section-header">
                 <h2 className="admin-section-title">Promoções em Destaque</h2>
@@ -730,6 +872,7 @@ const PlansPromosTab = () => {
                     </div>
                 </Modal>
             )}
+            </div>
         </div>
     );
 };
@@ -738,154 +881,58 @@ const PlansPromosTab = () => {
 // DASHBOARD TAB
 
 // ══════════════════════════════════════════════════════════════════════════════
-const DashboardTab = () => {
-    const [stats, setStats] = useState({ todayAppointments: 0, newCustomers: 0, completedSessions: 0, revenue: 0 });
-    const [loading, setLoading] = useState(true);
+// ── Dashboard is now modular ──
 
-    const fetchStats = useCallback(async () => {
-        setLoading(true);
-        try {
-            const today = new Date().toISOString().split('T')[0];
-
-            // 1. Agendamentos Hoje
-            const { count: countToday } = await supabase
-                .from('appointments')
-                .select('*', { count: 'exact', head: true })
-                .eq('date', today);
-
-            // 2. Clientes Novos Hoje
-            const { count: countCustomers } = await supabase
-                .from('customers')
-                .select('*', { count: 'exact', head: true })
-                .gte('created_at', today);
-
-            // 3. Sessões Finalizadas de hoje
-            const { data: completedData } = await supabase
-                .from('appointments')
-                .select('session_price')
-                .eq('date', today)
-                .eq('status', 'finished');
-
-            const appRevenue = (completedData || []).reduce((acc, curr) => acc + (parseFloat(curr.session_price) || 0), 0);
-
-            // 4. Faturamento via tabela finances (hoje)
-            const { data: financesData } = await supabase
-                .from('finances')
-                .select('amount')
-                .eq('date', today)
-                .eq('type', 'income');
-
-            const finRevenue = (financesData || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-
-            setStats({
-                todayAppointments: countToday || 0,
-                newCustomers: countCustomers || 0,
-                completedSessions: (completedData || []).length,
-                revenue: appRevenue + finRevenue
-            });
-        } catch (err) {
-            console.error('Erro ao carregar dashboard:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchStats();
-    }, [fetchStats]);
-
-    // Real-time listeners for dashboard stats
-    useEffect(() => {
-        const appointmentChannel = supabase.channel('realtime-dashboard-appointments')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
-                fetchStats();
-            })
-            .subscribe();
-
-        const customerChannel = supabase.channel('realtime-dashboard-customers')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
-                fetchStats();
-            })
-            .subscribe();
-
-        const financesChannel = supabase.channel('realtime-dashboard-finances')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'finances' }, () => {
-                fetchStats();
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(appointmentChannel);
-            supabase.removeChannel(customerChannel);
-            supabase.removeChannel(financesChannel);
-        };
-    }, [fetchStats]);
-
-    if (loading) return <div className="admin-loading">Carregando painel...</div>;
-
-    return (
-        <div className="fade-in">
-            <h2 className="admin-section-title">Painel de Controle</h2>
-            <div className="admin-stats-grid">
-                <div className="admin-stat-card">
-                    <div className="stat-icon-wrapper"><CalendarDays size={24} /></div>
-                    <div>
-                        <p>Agendamentos Hoje</p>
-                        <h3>{stats.todayAppointments}</h3>
-                    </div>
-                </div>
-                <div className="admin-stat-card">
-                    <div className="stat-icon-wrapper" style={{ color: '#4ade80', background: 'rgba(74, 222, 128, 0.1)' }}><Users size={24} /></div>
-                    <div>
-                        <p>Clientes Novos</p>
-                        <h3>{stats.newCustomers}</h3>
-                    </div>
-                </div>
-                <div className="admin-stat-card">
-                    <div className="stat-icon-wrapper" style={{ color: '#A78BFA', background: 'rgba(167, 139, 250, 0.1)' }}><Trophy size={24} /></div>
-                    <div>
-                        <p>Sessões Realizadas</p>
-                        <h3>{stats.completedSessions}</h3>
-                    </div>
-                </div>
-                <div className="admin-stat-card">
-                    <div className="stat-icon-wrapper" style={{ color: '#FF7A00', background: 'rgba(255, 122, 0, 0.1)' }}><TrendingUp size={24} /></div>
-                    <div>
-                        <p>Faturamento Hoje</p>
-                        <h3>R$ {stats.revenue.toFixed(2)}</h3>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
 
 // ══════════════════════════════════════════════════════════════════════════════
 // APPOINTMENTS TAB
 // ══════════════════════════════════════════════════════════════════════════════
-const AppointmentsTab = () => {
+export const AppointmentsTab = () => {
     const [appointments, setAppointments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState({ date: '', status: '', service: '' });
     const [selectedIds, setSelectedIds] = useState([]);
     const [bulkAction, setBulkAction] = useState('');
+    const [usageModalApp, setUsageModalApp] = useState(null); // Para o BarberUsageModal
 
     const fetchAppointments = useCallback(async () => {
+        let isActive = true;
         setLoading(true);
-        let query = supabase.from('appointments').select(`
-            *,
-            customers (name, phone),
-            services (name),
-            artists (name)
-        `).order('created_at', { ascending: false });
-        if (filters.date) query = query.eq('date', filters.date);
-        if (filters.status) query = query.eq('status', filters.status);
-        // Note: Filter by service_name removed as the column is now handled via relational join
-        // We could filter by service_id if needed, but for now we skip the text filter or use ilike on the join if possible.
-        const { data } = await query;
-        setAppointments(data || []);
-        setSelectedIds([]);
-        setLoading(false);
+        
+        const timeoutGuard = setTimeout(() => {
+            if (isActive) {
+                console.warn("[AppointmentsTab] Fetch slow or hung, overriding loading state.");
+                setLoading(false);
+            }
+        }, 6000);
+
+        try {
+            let query = supabase.from('appointments').select(`
+                *,
+                customers (name, phone),
+                services (name),
+                artists (name)
+            `);
+
+            if (filters.date) query = query.eq('date', filters.date);
+            if (filters.status) query = query.eq('status', filters.status);
+            
+            // Order and fetch
+            const { data, error } = await query.order('created_at', { ascending: false });
+            if (!isActive) return;
+            
+            if (error) {
+                console.error("Erro na query de agendamentos:", error);
+            }
+            
+            setAppointments(data || []);
+            setSelectedIds([]);
+        } catch (err) {
+            console.error("Erro fatal ao buscar agendamentos:", err);
+        } finally {
+            clearTimeout(timeoutGuard);
+            if (isActive) setLoading(false);
+        }
     }, [filters]);
 
     useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
@@ -901,12 +948,34 @@ const AppointmentsTab = () => {
     }, [fetchAppointments]);
 
     const updateStatus = async (id, status) => {
+        // Ao finalizar, abrir modal para o barbeiro registrar o consumo
+        if (status === 'finished') {
+            const app = appointments.find(a => a.id === id);
+            if (app) {
+                // Preencher dados extras para o BarberUsageModal
+                const enriched = {
+                    ...app,
+                    customer_name: app.customers?.name || 'Cliente',
+                    service_name: app.services?.name || 'Serviço',
+                    barber_name: app.artists?.name || '',
+                };
+                setUsageModalApp(enriched);
+                return; // O modal cuidará de finalizar
+            }
+        }
         await supabase.from('appointments').update({ status }).eq('id', id);
         setAppointments(prev => prev.map(a => a.id === id ? { ...a, status } : a));
     };
 
+    const finalizeAppointment = async (app) => {
+        // Chamado pelo BarberUsageModal após salvar o consumo
+        await supabase.from('appointments').update({ status: 'finished' }).eq('id', app.id);
+        setAppointments(prev => prev.map(a => a.id === app.id ? { ...a, status: 'finished' } : a));
+        setUsageModalApp(null);
+    };
+
     const deleteAppointment = async (id) => {
-        if (!confirm('Excluir este agendamento?')) return;
+        if (!(await myConfirm('Excluir este agendamento?'))) return;
         await supabase.from('appointments').delete().eq('id', id);
         setAppointments(prev => prev.filter(a => a.id !== id));
         setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
@@ -925,12 +994,12 @@ const AppointmentsTab = () => {
         if (!bulkAction || selectedIds.length === 0) return;
 
         if (bulkAction === 'delete') {
-            if (!confirm(`Tem certeza que deseja excluir ${selectedIds.length} agendamento(s)?`)) return;
+            if (!(await myConfirm(`Tem certeza que deseja excluir ${selectedIds.length} agendamento(s)?`))) return;
             await supabase.from('appointments').delete().in('id', selectedIds);
             setAppointments(prev => prev.filter(a => !selectedIds.includes(a.id)));
         } else {
             // It's a status update
-            if (!confirm(`Tem certeza que deseja alterar o status de ${selectedIds.length} agendamento(s) para '${bulkAction}'?`)) return;
+            if (!(await myConfirm(`Tem certeza que deseja alterar o status de ${selectedIds.length} agendamento(s) para '${bulkAction}'?`))) return;
             await supabase.from('appointments').update({ status: bulkAction }).in('id', selectedIds);
             setAppointments(prev => prev.map(a => selectedIds.includes(a.id) ? { ...a, status: bulkAction } : a));
         }
@@ -941,6 +1010,11 @@ const AppointmentsTab = () => {
 
     return (
         <div className="fade-in">
+            <MiniTutorial 
+                id="appointments_guide" 
+                title="Dominando sua Agenda" 
+                text="Gerencie todos os cortes marcados. Você pode confirmar, cancelar ou finalizar um atendimento para dar baixa no estoque automaticamente." 
+            />
             <div className="admin-section-header">
                 <h2 className="admin-section-title">Agendamentos</h2>
                 <button className="admin-refresh-btn" onClick={fetchAppointments}><RefreshCw size={16} /> Atualizar</button>
@@ -1053,6 +1127,15 @@ const AppointmentsTab = () => {
                     </table>
                 </div>
             )}
+
+            {/* BarberUsageModal — aparece ao finalizar o atendimento */}
+            {usageModalApp && (
+                <BarberUsageModal
+                    appointment={usageModalApp}
+                    onClose={() => setUsageModalApp(null)}
+                    onSaved={() => finalizeAppointment(usageModalApp)}
+                />
+            )}
         </div>
     );
 };
@@ -1060,7 +1143,7 @@ const AppointmentsTab = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 // SUBSCRIPTIONS (MENSALISTAS) TAB
 // ══════════════════════════════════════════════════════════════════════════════
-const SubscriptionsTab = () => {
+export const SubscriptionsTab = () => {
     const [subscriptions, setSubscriptions] = useState([]);
     const [artists, setArtists] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -1139,7 +1222,7 @@ const SubscriptionsTab = () => {
 
     const handleApproveSubscription = async (sub) => {
         const clientName = sub.customer?.name || 'Cliente';
-        if (!confirm(`Confirmar pagamento e ativar o plano ${sub.plan?.title || 'Plano'} para ${clientName}?`)) return;
+        if (!(await myConfirm(`Confirmar pagamento e ativar o plano ${sub.plan?.title || 'Plano'} para ${clientName}?`))) return;
 
         try {
             const now = new Date();
@@ -1182,7 +1265,7 @@ const SubscriptionsTab = () => {
 
     const handleRenew = async (sub) => {
         const clientName = sub.customer?.name || 'Cliente';
-        if (!confirm(`Gerar nova oferta de renovação para ${clientName}? Uma nova entrada pendente será criada.`)) return;
+        if (!(await myConfirm(`Gerar nova oferta de renovação para ${clientName}? Uma nova entrada pendente será criada.`))) return;
 
         try {
             // Clone the subscription as a new pending entry
@@ -1222,7 +1305,7 @@ const SubscriptionsTab = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir esta assinatura?')) return;
+        if (!(await myConfirm('Tem certeza que deseja excluir esta assinatura?'))) return;
         await supabase.from('plan_subscriptions').delete().eq('id', id);
         setSubscriptions(prev => prev.filter(s => s.id !== id));
     };
@@ -1250,13 +1333,13 @@ const SubscriptionsTab = () => {
         if (!bulkAction || selectedIds.length === 0) return;
 
         if (bulkAction === 'delete') {
-            if (!confirm(`Tem certeza que deseja excluir ${selectedIds.length} assinatura(s)?`)) return;
+            if (!(await myConfirm(`Tem certeza que deseja excluir ${selectedIds.length} assinatura(s)?`))) return;
             const { error } = await supabase.from('plan_subscriptions').delete().in('id', selectedIds);
             if (error) alert('Erro ao excluir algumas assinaturas.');
             setSubscriptions(prev => prev.filter(s => !selectedIds.includes(s.id)));
         } else {
             // Bulk status update
-            if (!confirm(`Tem certeza que deseja alterar o status de ${selectedIds.length} assinatura(s) para '${bulkAction}'?`)) return;
+            if (!(await myConfirm(`Tem certeza que deseja alterar o status de ${selectedIds.length} assinatura(s) para '${bulkAction}'?`))) return;
             const { error } = await supabase.from('plan_subscriptions').update({ status: bulkAction }).in('id', selectedIds);
             if (error) alert('Erro ao atualizar algumas assinaturas.');
             setSubscriptions(prev => prev.map(s => selectedIds.includes(s.id) ? { ...s, status: bulkAction } : s));
@@ -1268,6 +1351,11 @@ const SubscriptionsTab = () => {
 
     return (
         <div className="fade-in">
+            <MiniTutorial 
+                id="subscriptions_guide" 
+                title="Sua Máquina de Receita Recurrente" 
+                text="Gerencie seus planos de assinatura e mensalistas aqui. Acompanhe o consumo de cortes no mês e garanta que ninguém fique com o pagamento pendente!" 
+            />
             <div className="admin-section-header">
                 <div>
                     <h2 className="admin-section-title">Mensalistas</h2>
@@ -1645,7 +1733,7 @@ const SubscriptionsTab = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 // CUSTOMERS TAB (CRM)
 // ══════════════════════════════════════════════════════════════════════════════
-const CustomersTab = () => {
+export const CustomersTab = () => {
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -1661,12 +1749,24 @@ const CustomersTab = () => {
 
     const fetchCustomers = useCallback(async () => {
         setLoading(true);
-        let query = supabase.from('customers').select('*').order('name', { ascending: true });
-        if (search) query = query.ilike('name', `%${search}%`);
-        const { data } = await query;
-        setCustomers(data || []);
-        setSelectedIds([]);
-        setLoading(false);
+        const timeoutGuard = setTimeout(() => {
+            console.warn("[CustomersTab] Fetch slow or hung, overriding loading state.");
+            setLoading(false);
+        }, 6000);
+
+        try {
+            let query = supabase.from('customers').select('*').order('name', { ascending: true });
+            if (search) query = query.ilike('name', `%${search}%`);
+            const { data, error } = await query;
+            if (error) throw error;
+            setCustomers(data || []);
+            setSelectedIds([]);
+        } catch (err) {
+            console.error("Error fetching customers:", err);
+        } finally {
+            clearTimeout(timeoutGuard);
+            setLoading(false);
+        }
     }, [search]);
 
     useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
@@ -1712,7 +1812,7 @@ const CustomersTab = () => {
     };
 
     const remove = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+        if (!(await myConfirm('Tem certeza que deseja excluir este cliente?'))) return;
         await supabase.from('customers').delete().eq('id', id);
         setCustomers(prev => prev.filter(c => c.id !== id));
         setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
@@ -1731,7 +1831,7 @@ const CustomersTab = () => {
         if (!bulkAction || selectedIds.length === 0) return;
 
         if (bulkAction === 'delete') {
-            if (!confirm(`ATENÇÃO: Excluir um cliente pode excluir ou quebrar seus agendamentos.\n\nTem certeza que deseja excluir ${selectedIds.length} cliente(s)?`)) return;
+            if (!(await myConfirm(`ATENÇÃO: Excluir um cliente pode excluir ou quebrar seus agendamentos.\n\nTem certeza que deseja excluir ${selectedIds.length} cliente(s)?`))) return;
             await supabase.from('customers').delete().in('id', selectedIds);
             setCustomers(prev => prev.filter(c => !selectedIds.includes(c.id)));
         }
@@ -1742,6 +1842,11 @@ const CustomersTab = () => {
 
     return (
         <div className="fade-in">
+            <MiniTutorial 
+                id="customers_crm_guide" 
+                title="Relacionamento é Lucro" 
+                text="Aqui está o seu CRM. Veja o histórico de cada cliente, anote preferências e use os dados para ações de marketing direcionadas (como aniversariantes do mês)." 
+            />
             <div className="admin-section-header">
                 <h2 className="admin-section-title">Clientes (CRM)</h2>
                 <button className="admin-add-btn neon-glow" onClick={openNew}><Plus size={16} /> <span>Adicionar Cliente</span></button>
@@ -1862,35 +1967,15 @@ const CustomersTab = () => {
         </div>
     );
 };
-const ServicesTab = ({ siteData, updateSiteData }) => {
-    const [services, setServices] = useState([]);
-    const [loading, setLoading] = useState(true);
+export const ServicesTab = ({ services = [], loading = false, refresh, updateSiteData }) => {
     const [showModal, setShowModal] = useState(false);
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState({ name: '', description: '', price: '', duration_mins: '', is_featured: false });
     const [selectedIds, setSelectedIds] = useState([]);
     const [bulkAction, setBulkAction] = useState('');
+    const [serviceForProducts, setServiceForProducts] = useState(null); // For ServiceProductsManager
 
-    const fetchServices = useCallback(async () => {
-        setLoading(true);
-        const { data } = await supabase.from('services').select('*').order('name');
-        setServices(data || []);
-        setLoading(false);
-    }, []);
-
-    useEffect(() => {
-        fetchServices();
-    }, [fetchServices]);
-
-    // Real-time listener for services
-    useEffect(() => {
-        const channel = supabase.channel('realtime-services-list')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => {
-                fetchServices();
-            })
-            .subscribe();
-        return () => { supabase.removeChannel(channel); };
-    }, [fetchServices]);
+    const fetchServices = refresh;
 
     const openNew = () => {
         setEditing(null);
@@ -1934,7 +2019,7 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
     };
 
     const remove = async (id) => {
-        if (!confirm('Excluir este serviço? Isso pode afetar agendamentos existentes.')) return;
+        if (!(await myConfirm('Excluir este serviço? Isso pode afetar agendamentos existentes.'))) return;
         const { error } = await supabase.from('services').delete().eq('id', id);
         if (error) {
             console.error('Error deleting service:', error);
@@ -1957,7 +2042,7 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
         if (!bulkAction || selectedIds.length === 0) return;
 
         if (bulkAction === 'delete') {
-            if (!confirm(`Tem certeza que deseja excluir ${selectedIds.length} serviço(s)? Isso pode afetar agendamentos existentes.`)) return;
+            if (!(await myConfirm(`Tem certeza que deseja excluir ${selectedIds.length} serviço(s)? Isso pode afetar agendamentos existentes.`))) return;
             const { error } = await supabase.from('services').delete().in('id', selectedIds);
             if (error) {
                 console.error('Error deleting services:', error);
@@ -1973,6 +2058,11 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
 
     return (
         <div className="fade-in">
+            <MiniTutorial 
+                id="services_setup_guide" 
+                title="Configuração de Lucratividade" 
+                text="Cadastre seus serviços e use o ícone de 'corrente' para vincular produtos. Assim, o sistema desconta do estoque e calcula seu lucro real por corte!" 
+            />
             <div className="admin-section-header">
                 <h2 className="admin-section-title">Gestão de Serviços</h2>
                 <button className="admin-add-btn neon-glow" onClick={openNew}>
@@ -2048,6 +2138,7 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
                                     <td>{s.is_featured ? <span style={{ color: 'var(--color-primary)' }}>★ Sim</span> : <span style={{ color: '#555' }}>Não</span>}</td>
                                     <td style={{ textAlign: 'center' }}>
                                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                            <button className="action-btn" onClick={() => setServiceForProducts(s)} title="Produtos Vinculados" style={{ color: '#f59e0b' }}><Link2 size={18} /></button>
                                             <button className="action-btn edit" onClick={() => openEdit(s)} title="Editar"><Pencil size={18} /></button>
                                             <button className="action-btn delete" onClick={() => remove(s.id)} title="Excluir"><Trash2 size={18} /></button>
                                         </div>
@@ -2093,6 +2184,14 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
                     </div>
                 </Modal>
             )}
+
+            {/* Service Products Manager Modal */}
+            {serviceForProducts && (
+                <ServiceProductsManager
+                    service={serviceForProducts}
+                    onClose={() => setServiceForProducts(null)}
+                />
+            )}
         </div>
     );
 };
@@ -2100,50 +2199,87 @@ const ServicesTab = ({ siteData, updateSiteData }) => {
 // ══════════════════════════════════════════════════════════════════════════════
 // ARTISTS TAB (CRUD)
 // ══════════════════════════════════════════════════════════════════════════════
-const ArtistsTab = () => {
-    const [artists, setArtists] = useState([]);
-    const [loading, setLoading] = useState(true);
+export const ArtistsTab = ({ artists = [], loading = false, refresh }) => {
     const [showModal, setShowModal] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [form, setForm] = useState({ name: '', photo_url: '', instagram: '', specialty: '', active: true });
+    const [form, setForm] = useState({ name: '', photo_url: '', instagram: '', specialty: '', active: true, commission_percentage: 0, email: '', pin: '' });
     const [uploading, setUploading] = useState(false);
+    const [saving, setSaving] = useState(false);
 
-    const fetchArtists = useCallback(async () => {
-        setLoading(true);
-        const { data } = await supabase.from('artists').select('*').order('name');
-        setArtists(data || []);
-        setLoading(false);
-    }, []);
+    const fetchArtists = refresh;
 
-    useEffect(() => { fetchArtists(); }, [fetchArtists]);
+    const openNew = () => { 
+        setEditing(null); 
+        setForm({ name: '', photo_url: '', instagram: '', specialty: '', active: true, commission_percentage: 0, email: '', pin: '' }); 
+        setShowModal(true); 
+    };
 
-    // Real-time listener for artists
-    useEffect(() => {
-        const channel = supabase.channel('realtime-artists-list')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'artists' }, () => {
-                fetchArtists();
-            })
-            .subscribe();
-        return () => { supabase.removeChannel(channel); };
-    }, [fetchArtists]);
-
-    const openNew = () => { setEditing(null); setForm({ name: '', photo_url: '', instagram: '', specialty: '', active: true }); setShowModal(true); };
-    const openEdit = (a) => { setEditing(a); setForm({ name: a.name, photo_url: a.photo_url || '', instagram: a.instagram || '', specialty: a.specialty || '', active: a.active ?? true }); setShowModal(true); };
+    const openEdit = async (a) => { 
+        setEditing(a); 
+        // Tenta buscar o PIN e Email já cadastrados para este artista na tabela user_roles
+        const { data: userData } = await supabase.from('user_roles').select('email, access_pin').eq('artist_id', a.id).single();
+        
+        setForm({ 
+            name: a.name, 
+            photo_url: a.photo_url || '', 
+            instagram: a.instagram || '', 
+            specialty: a.specialty || '', 
+            active: a.active ?? true, 
+            commission_percentage: a.commission_percentage || 0,
+            email: userData?.email || '',
+            pin: userData?.access_pin || ''
+        }); 
+        setShowModal(true); 
+    };
 
     const save = async () => {
         if (!form.name) return alert('Nome é obrigatório');
+        setSaving(true);
 
-        const { error } = editing
-            ? await supabase.from('artists').update(form).eq('id', editing.id)
-            : await supabase.from('artists').insert([form]);
+        try {
+            const payload = {
+                name: form.name,
+                photo_url: form.photo_url,
+                instagram: form.instagram,
+                specialty: form.specialty,
+                active: form.active,
+                commission_percentage: parseFloat(form.commission_percentage) || 0
+            };
 
-        if (error) {
+            let artistId = editing?.id;
+
+            if (editing) {
+                const { error } = await supabase.from('artists').update(payload).eq('id', editing.id);
+                if (error) throw error;
+            } else {
+                const { data, error } = await supabase.from('artists').insert([payload]).select().single();
+                if (error) throw error;
+                artistId = data.id;
+            }
+
+            // Se um e-mail foi fornecido, atualiza ou cria o acesso do profissional
+            if (form.email.trim()) {
+                const { error: roleError } = await supabase.from('user_roles').upsert({
+                    email: form.email.toLowerCase().trim(),
+                    role: 'barber',
+                    access_pin: form.pin,
+                    artist_id: artistId
+                }, { onConflict: 'email' });
+                
+                if (roleError) {
+                    console.error('Erro ao salvar acesso:', roleError);
+                    alert('Profissional salvo, mas houve um erro ao configurar o e-mail de acesso: ' + roleError.message);
+                }
+            }
+
+            setShowModal(false);
+            if (fetchArtists) fetchArtists();
+        } catch (error) {
             console.error('Error saving artist:', error);
-            return alert('Erro ao salvar no banco de dados: ' + error.message);
+            alert('Erro ao salvar profissional: ' + error.message);
+        } finally {
+            setSaving(false);
         }
-
-        setShowModal(false);
-        fetchArtists();
     };
 
     const handleFileUpload = async (e) => {
@@ -2166,7 +2302,7 @@ const ArtistsTab = () => {
     };
 
     const remove = async (id) => {
-        if (!confirm('Excluir este profissional? (Desativar pode ser melhor para manter o histórico).')) return;
+        if (!(await myConfirm('Excluir este profissional? (Desativar pode ser melhor para manter o histórico).'))) return;
         await supabase.from('artists').delete().eq('id', id);
         fetchArtists();
     };
@@ -2179,6 +2315,11 @@ const ArtistsTab = () => {
 
     return (
         <div className="fade-in">
+            <MiniTutorial 
+                id="artists_team_guide" 
+                title="Sua Equipe de Elite" 
+                text="Gerencie seus barbeiros e profissionais. Você pode definir quem aparece no site para agendamentos e quem pode receber comissões." 
+            />
             <div className="admin-section-header">
                 <h2 className="admin-section-title">Profissionais</h2>
                 <button className="admin-add-btn" onClick={openNew}>
@@ -2236,6 +2377,11 @@ const ArtistsTab = () => {
                             <input className="form-input" value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} />
                         </div>
                         <div className="form-group">
+                            <label>Comissão (%)*</label>
+                            <input type="number" className="form-input" placeholder="Ex: 50" value={form.commission_percentage} onChange={e => setForm(f => ({ ...f, commission_percentage: e.target.value }))} />
+                            <small style={{ color: '#888' }}>Porcentagem paga sobre o valor de cada serviço.</small>
+                        </div>
+                        <div className="form-group">
                             <label>Foto do Profissional</label>
                             {form.photo_url ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px' }}>
@@ -2261,9 +2407,24 @@ const ArtistsTab = () => {
                             <label htmlFor="active" style={{ margin: 0 }}>Profissional Ativo (Aparece no Agendamento)</label>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
-                            <button className="admin-btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                            <button className="admin-btn-primary neon-glow" onClick={save}><Save size={16} /> Salvar</button>
+                        <div className="glass-panel" style={{ padding: '15px', marginTop: '10px', background: 'rgba(255,255,255,0.03)' }}>
+                            <h4 style={{ marginBottom: '10px', fontSize: '0.9rem', color: 'var(--color-primary)' }}>🔑 Dados de Acesso (Opcional)</h4>
+                            <div className="form-group">
+                                <label style={{ fontSize: '0.8rem' }}>E-mail para Login</label>
+                                <input className="form-input" placeholder="ex: joao@barbearia.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+                            </div>
+                            <div className="form-group">
+                                <label style={{ fontSize: '0.8rem' }}>Senha / PIN de Acesso</label>
+                                <input className="form-input" placeholder="Min 4 dígitos" value={form.pin} onChange={e => setForm(f => ({ ...f, pin: e.target.value }))} />
+                            </div>
+                            <small style={{ color: '#888' }}>Se preenchido, o barbeiro poderá logar no sistema com estes dados.</small>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                            <button className="admin-btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>Cancelar</button>
+                            <button className="admin-btn-primary neon-glow" onClick={save} disabled={saving}>
+                                {saving ? 'Salvando...' : <><Save size={16} /> Salvar</>}
+                            </button>
                         </div>
                     </div>
                 </Modal>
@@ -2276,24 +2437,30 @@ const ArtistsTab = () => {
 // SETTINGS TAB
 // ══════════════════════════════════════════════════════════════════════════════
 const SettingsField = ({ label, field, type = 'text', placeholder, form, setForm }) => (
-    <div className="form-group">
-        <label>{label}</label>
-        <input className="form-input" type={type} value={form[field] || ''} placeholder={placeholder}
-            onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))} />
+    <div className="form-group" style={{ flex: 1, minWidth: '250px' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>{label}</label>
+        <input
+            type={type}
+            className="form-input"
+            placeholder={placeholder}
+            value={form[field] || ''}
+            onChange={e => setForm({ ...form, [field]: e.target.value })}
+            style={{ width: '100%' }}
+        />
     </div>
 );
 
 const SettingsTimeField = ({ labelPrefix, prefixKey, form, setForm }) => (
     <div style={{ marginBottom: 15 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '10px' }}>
-            <SettingsField label={`Rótulo(${labelPrefix})`} field={`${prefixKey} Label`} form={form} setForm={setForm} />
-            <SettingsField label="Abre (HH:MM)" field={`${prefixKey} Open`} placeholder="09:00" form={form} setForm={setForm} />
-            <SettingsField label="Fecha (HH:MM)" field={`${prefixKey} Close`} placeholder="19:00" form={form} setForm={setForm} />
+            <SettingsField label={`Rótulo (${labelPrefix})`} field={`${prefixKey}Label`} form={form} setForm={setForm} />
+            <SettingsField label="Abre (HH:MM)" field={`${prefixKey}Open`} placeholder="09:00" form={form} setForm={setForm} />
+            <SettingsField label="Fecha (HH:MM)" field={`${prefixKey}Close`} placeholder="19:00" form={form} setForm={setForm} />
         </div>
     </div>
 );
 
-const SettingsTab = () => {
+export const SettingsTab = () => {
     const [form, setForm] = useState({
         phone: '',
         whatsapp: '',
@@ -2319,12 +2486,31 @@ const SettingsTab = () => {
     const [uploading, setUploading] = useState({ logo: false, banner: false });
 
     useEffect(() => {
+        let isActive = true;
+        
         const fetchSettings = async () => {
-            const { data } = await supabase.from('settings').select('*');
-            if (data) {
-                const contact = data.find(s => s.key_name === 'contact')?.value || {};
-                const hours = data.find(s => s.key_name === 'operating_hours')?.value || {};
-                const branding = data.find(s => s.key_name === 'branding')?.value || {};
+            if (!isActive) return;
+            setLoading(true);
+            
+            // Timeout guard: force loading=false if DB hangs
+            const timeoutGuard = setTimeout(() => {
+                if (isActive) {
+                    console.warn("Settings fetch timed out. Forcing UI visible.");
+                    setLoading(false);
+                }
+            }, 6000);
+
+            try {
+                const { data, error } = await supabase.from('settings').select('*');
+                if (!isActive) return;
+                if (error) throw error;
+                
+                // Ensure data is array
+                const rows = Array.isArray(data) ? data : [];
+                
+                const contact = rows.find(s => s.key_name === 'contact')?.value || {};
+                const hours = rows.find(s => s.key_name === 'operating_hours')?.value || {};
+                const branding = rows.find(s => s.key_name === 'branding')?.value || {};
 
                 setForm(f => ({
                     ...f,
@@ -2347,10 +2533,27 @@ const SettingsTab = () => {
                     sundaysOpen: hours.sundays?.open || '',
                     sundaysClose: hours.sundays?.close || '',
                 }));
+            } catch (err) {
+                console.error("Error loading settings:", err);
+            } finally {
+                clearTimeout(timeoutGuard);
+                if (isActive) setLoading(false);
             }
-            setLoading(false);
         };
+        
         fetchSettings();
+
+        // Real-time sync for settings
+        const channel = supabase.channel('realtime-settings')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, () => {
+                fetchSettings();
+            })
+            .subscribe();
+
+        return () => { 
+            isActive = false;
+            supabase.removeChannel(channel); 
+        };
     }, []);
 
     const save = async () => {
@@ -2411,7 +2614,7 @@ const SettingsTab = () => {
             <div className="glass-panel" style={{ padding: '20px', borderRadius: 12, marginBottom: 20 }}>
                 <h3 style={{ marginBottom: 16, fontSize: '1.1rem', color: 'var(--color-primary)' }}>🎨 Identidade Visual (Logo e Banner)</h3>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px', marginBottom: '20px' }}>
                     <div className="form-group">
                         <label>Logotipo Principal</label>
                         {form.logoUrl ? (
@@ -2442,7 +2645,7 @@ const SettingsTab = () => {
                 </div>
 
                 <h4 style={{ fontSize: '0.9rem', color: '#888', marginBottom: '10px' }}>Textos Base</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
                     <SettingsField label="Título no Menu Superior" field="menuTitle" placeholder="Ex: BARBEARIA CLÁSSICA" form={form} setForm={setForm} />
                     <SettingsField label="Título Principal (Banner)" field="heroTitle" placeholder="Ex: BARBEARIA CLÁSSICA" form={form} setForm={setForm} />
                     <SettingsField label="Subtítulo / Slogan" field="heroSubtitle" placeholder="Ex: Estilo Clássico. Atendimento Premium." form={form} setForm={setForm} />
@@ -2451,7 +2654,7 @@ const SettingsTab = () => {
 
             <div className="glass-panel" style={{ padding: '20px', borderRadius: 12, marginBottom: 20 }}>
                 <h3 style={{ marginBottom: 16, fontSize: '1.1rem', color: 'var(--color-primary)' }}>📞 Contato & Info</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
                     <SettingsField label="Telefone" field="phone" form={form} setForm={setForm} />
                     <SettingsField label="WhatsApp (apenas números)" field="whatsapp" placeholder="5531971129936" form={form} setForm={setForm} />
                 </div>
@@ -2467,9 +2670,181 @@ const SettingsTab = () => {
                 <SettingsTimeField labelPrefix="Finais de semana 2" prefixKey="sundays" form={form} setForm={setForm} />
             </div>
 
-            <button className="admin-btn-primary neon-glow" style={{ width: '100%', padding: '15px', fontSize: '1.1rem' }} onClick={save}>
+            <button className="admin-btn-primary neon-glow" style={{ width: '100%', padding: '15px', fontSize: '1.1rem', marginBottom: 30 }} onClick={save}>
                 {saved ? '✅ Salvo com sucesso!' : <><Save size={18} style={{ marginRight: 8 }} />Salvar Configurações</>}
             </button>
+
+            <UserManagement />
+        </div>
+    );
+};
+
+// ─── User Management Component ───
+const UserManagement = () => {
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [userForm, setUserForm] = useState({ email: '', role: 'barber', password: '' });
+    const [editingUserId, setEditingUserId] = useState(null);
+    const { isAdmin } = useAuth();
+
+    const fetchUsers = useCallback(async () => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.from('user_roles').select('*');
+            if (error) throw error;
+            setUsers(data || []);
+        } catch (err) {
+            console.error("Error fetching users:", err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isAdmin) fetchUsers();
+    }, [isAdmin, fetchUsers]);
+
+    const handleSaveUser = async () => {
+        if (!userForm.email.trim()) return alert("E-mail é obrigatório.");
+        
+        const normalizedEmail = userForm.email.toLowerCase().trim();
+        console.log("[Admin] Iniciando salvamento via RPC para:", normalizedEmail);
+        
+        try {
+            const { error } = await supabase.rpc('pre_authorize_user', {
+                p_email: normalizedEmail,
+                p_role: userForm.role,
+                p_pin: userForm.password
+            });
+
+            if (error) throw error;
+            
+            const roleLabel = userForm.role === 'admin' ? 'Administrador' : 'Barbeiro';
+            alert(`✅ Acesso Configurado!\n\nE-mail: ${normalizedEmail}\nCargo: ${roleLabel}\nSenha/PIN: ${userForm.password || 'Mantida/Não definida'}\n\nO colaborador já pode acessar.`);
+            setShowModal(false);
+            setUserForm({ email: '', role: 'barber', password: '' });
+            setEditingUserId(null);
+            fetchUsers();
+        } catch (err) {
+            console.error("[Admin] Erro no salvamento:", err);
+            alert("Erro ao salvar usuário: " + (err.message || "Erro desconhecido"));
+        }
+    };
+
+    const handleEdit = (user) => {
+        setUserForm({
+            email: user.email,
+            role: user.role,
+            password: user.access_pin || ''
+        });
+        setEditingUserId(user.id);
+        setShowModal(true);
+    };
+
+    const removeUserRole = async (id) => {
+        if (!(await myConfirm("Remover acesso deste usuário?"))) return;
+        const { error } = await supabase.from('user_roles').delete().eq('id', id);
+        if (error) alert("Erro ao remover: " + error.message);
+        else fetchUsers();
+    };
+
+    if (!isAdmin) return null;
+
+    return (
+        <div className="glass-panel" style={{ padding: '20px', borderRadius: 12, marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h3 style={{ fontSize: '1.1rem', color: 'var(--color-primary)', margin: 0 }}>👥 Gestão de Acessos (Equipe)</h3>
+                <button className="admin-add-btn neon-glow" onClick={() => setShowModal(true)}>
+                    <Plus size={16} /> Novo Acesso
+                </button>
+            </div>
+
+            {loading ? <p>Carregando usuários...</p> : (
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                                <th style={{ padding: '10px' }}>E-mail</th>
+                                <th style={{ padding: '10px' }}>Cargo</th>
+                                <th style={{ padding: '10px' }}>Senha/PIN</th>
+                                <th style={{ padding: '10px', textAlign: 'right' }}>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {users.map(u => (
+                                <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <td style={{ padding: '10px' }}>{u.email}</td>
+                                    <td style={{ padding: '10px' }}>
+                                        <span style={{ 
+                                            padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem',
+                                            background: u.role === 'admin' ? 'rgba(74,222,128,0.1)' : 'rgba(167,139,250,0.1)',
+                                            color: u.role === 'admin' ? '#4ade80' : '#a78bfa'
+                                        }}>
+                                            {u.role === 'admin' ? 'Administrador' : 'Barbeiro'}
+                                        </span>
+                                    </td>
+                                    <td style={{ padding: '10px' }}>
+                                        <code>{u.access_pin || '---'}</code>
+                                    </td>
+                                    <td style={{ padding: '10px', textAlign: 'right', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                                        <button onClick={() => handleEdit(u)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer' }} title="Editar Senha/Cargo">
+                                            <Edit2 size={16} />
+                                        </button>
+                                        <button onClick={() => removeUserRole(u.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }} title="Remover Acesso">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {showModal && (
+                <Modal title={editingUserId ? "Editar Acesso" : "Configurar Novo Acesso"} onClose={() => { setShowModal(false); setEditingUserId(null); setUserForm({ email: '', role: 'barber', password: '' }); }}>
+                    <div className="admin-form">
+                        <div className="form-group">
+                            <label>E-mail do Colaborador</label>
+                            <input 
+                                type="email" 
+                                className="form-input" 
+                                value={userForm.email} 
+                                onChange={e => setUserForm({...userForm, email: e.target.value})}
+                                placeholder="exemplo@email.com"
+                                disabled={!!editingUserId}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Cargo / Nível de Acesso</label>
+                            <select 
+                                className="form-input" 
+                                value={userForm.role}
+                                onChange={e => setUserForm({...userForm, role: e.target.value})}
+                            >
+                                <option value="barber">Barbeiro (Acesso Restrito)</option>
+                                <option value="admin">Administrador (Acesso Total)</option>
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Senha / PIN de Acesso</label>
+                            <input 
+                                type="text" 
+                                className="form-input" 
+                                value={userForm.password} 
+                                onChange={e => setUserForm({...userForm, password: e.target.value})}
+                                placeholder="Defina uma senha ou PIN"
+                            />
+                            <small style={{ color: '#888' }}>{editingUserId ? "Deixe como está para manter a senha atual." : "Esta senha será usada para o login direto."}</small>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                            <button className="admin-btn-secondary" onClick={() => { setShowModal(false); setEditingUserId(null); setUserForm({ email: '', role: 'barber', password: '' }); }}>Cancelar</button>
+                            <button className="admin-btn-primary neon-glow" onClick={handleSaveUser}><Save size={16} /> Salvar Alterações</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 };
@@ -2478,213 +2853,19 @@ const SettingsTab = () => {
 // FINANCES TAB
 // ══════════════════════════════════════════════════════════════════════════════
 
-const FinancesTab = () => {
-    const [finances, setFinances] = useState({
-        faturamentoReal: 0,
-        faturamentoPrevisto: 0,
-        valoresPerdidos: 0,
-        depositosRecebidos: 0
-    });
-    const [recentTransactions, setRecentTransactions] = useState([]);
-    const [loading, setLoading] = useState(true);
+// ── Finances is now modular ──
 
-    const fetchFinances = useCallback(async () => {
-        setLoading(true);
-        // 1. Get appointments
-        const { data: appointmentsData } = await supabase.from('appointments').select(`
-            *,
-            customers(name),
-            services(name)
-        `).order('date', { ascending: false });
 
-        // 2. Get direct finances (new table)
-        const { data: finData } = await supabase.from('finances').select('*').order('date', { ascending: false });
+// ══════════════════════════════════════════════════════════════════════════════
+// AI HUB — Promoções & Planos Inteligentes
+// ══════════════════════════════════════════════════════════════════════════════
 
-        if (appointmentsData) {
-            let real = 0;
-            let previsto = 0;
-            let perdidos = 0;
-            let depositos = 0;
-            let txs = [];
-
-            appointmentsData.forEach(app => {
-                const sPrice = parseFloat(app.session_price) || 0;
-                const dPrice = parseFloat(app.deposit_price) || 0;
-                const clientName = app.client_name || app.customers?.name || 'Cliente';
-                const serviceName = app.service_name || app.services?.name || 'Serviço';
-
-                if (app.status === 'cancelled') {
-                    perdidos += sPrice;
-                    txs.push({ id: `canc-${app.id}`, date: app.date, desc: `Cancelamento: ${serviceName} (${clientName})`, amount: -sPrice, type: 'expense' });
-                } else if (app.status === 'finished') {
-                    // Entire session is realized
-                    real += sPrice;
-                    const remaining = sPrice - (app.deposit_status === 'paid' ? dPrice : 0);
-
-                    if (app.deposit_status === 'paid') {
-                        depositos += dPrice;
-                        txs.push({ id: `dep-${app.id}`, date: app.date, desc: `Sinal: ${serviceName} (${clientName})`, amount: dPrice, type: 'income' });
-                    }
-                    if (remaining > 0) {
-                        txs.push({ id: `ses-${app.id}`, date: app.date, desc: `Sessão Finalizada: ${serviceName} (${clientName})`, amount: remaining, type: 'income' });
-                    } else if (remaining === 0 && app.deposit_status !== 'paid' && sPrice > 0) {
-                        txs.push({ id: `ses-${app.id}`, date: app.date, desc: `Sessão Finalizada: ${serviceName} (${clientName})`, amount: sPrice, type: 'income' });
-                    }
-                } else {
-                    // Pending or Confirmed
-                    previsto += sPrice;
-                    if (app.deposit_status === 'paid') {
-                        real += dPrice;
-                        depositos += dPrice;
-                        txs.push({ id: `dep-${app.id}`, date: app.date, desc: `Sinal: ${serviceName} (${clientName})`, amount: dPrice, type: 'income' });
-                    }
-                }
-            });
-
-            // Merge finances table data
-            if (finData) {
-                finData.forEach(f => {
-                    const amount = parseFloat(f.amount) || 0;
-                    if (f.type === 'income') {
-                        real += amount;
-                        txs.push({ id: `fin-${f.id}`, date: f.date, desc: f.description, amount: amount, type: 'income' });
-                    } else {
-                        real -= amount;
-                        txs.push({ id: `fin-${f.id}`, date: f.date, desc: f.description, amount: amount, type: 'expense' });
-                    }
-                });
-            }
-
-            // Sort by date descending
-            txs = txs.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-            setFinances({
-                faturamentoReal: real,
-                faturamentoPrevisto: previsto,
-                valoresPerdidos: perdidos,
-                depositosRecebidos: depositos
-            });
-
-            setRecentTransactions(txs.slice(0, 15)); // Top 15 recent transactions
-        }
-        setLoading(false);
-    }, []);
-
-    useEffect(() => { fetchFinances(); }, [fetchFinances]);
-
-    // Real-time listeners for finances (listens to appointments and finances tables)
-    useEffect(() => {
-        const appointmentChannel = supabase.channel('realtime-finances-appointments')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
-                fetchFinances();
-            })
-            .subscribe();
-
-        const financesChannel = supabase.channel('realtime-finances-manual')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'finances' }, () => {
-                fetchFinances();
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(appointmentChannel);
-            supabase.removeChannel(financesChannel);
-        };
-    }, [fetchFinances]);
-
-    const exportToExcel = () => {
-        if (recentTransactions.length === 0) return alert('Nenhum dado para exportar.');
-
-        // Format data for Excel
-        const exportData = recentTransactions.map(t => ({
-            'Data': t.date.split('-').reverse().join('/'),
-            'Descrição': t.desc,
-            'Tipo': t.type === 'income' ? 'Entrada' : 'Saída',
-            'Valor (R$)': t.type === 'expense' ? -Math.abs(t.amount) : Math.abs(t.amount)
-        }));
-
-        // Create workbook and worksheet
-        const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-        // Adjust column widths
-        const wscols = [
-            { wch: 15 }, // Data
-            { wch: 50 }, // Descrição
-            { wch: 15 }, // Tipo
-            { wch: 15 }  // Valor
-        ];
-        worksheet['!cols'] = wscols;
-
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Financeiro");
-
-        // Format Date for filename
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        const fileName = `financeiro - barbearia - ${yyyy}-${mm}-${dd}.xlsx`;
-
-        // Export
-        XLSX.writeFile(workbook, fileName);
-    };
-
-    if (loading) return <div className="admin-loading">Carregando dados financeiros...</div>;
-
-    return (
-        <div className="fade-in">
-            <div className="admin-section-header">
-                <h2 className="admin-section-title">Financeiro</h2>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="admin-refresh-btn" onClick={exportToExcel} style={{ color: '#10B981', borderColor: '#10B981' }}>
-                        <Download size={16} /> Exportar Excel
-                    </button>
-                    <button className="admin-refresh-btn" onClick={fetchFinances}>
-                        <RefreshCw size={16} /> Atualizar
-                    </button>
-                </div>
-            </div>
-
-            <div className="admin-stats-grid" style={{ marginBottom: '30px' }}>
-                <StatCard icon="💰" label="Faturamento Real" value={`R$ ${finances.faturamentoReal.toFixed(2)} `} color="#4ade80" />
-                <StatCard icon="📅" label="Faturamento Previsto" value={`R$ ${finances.faturamentoPrevisto.toFixed(2)} `} color="#60a5fa" />
-                <StatCard icon="📉" label="Valores Cancelados" value={`R$ ${finances.valoresPerdidos.toFixed(2)} `} color="#ef4444" />
-                <StatCard icon="💎" label="Sinais Recebidos" value={`R$ ${finances.depositosRecebidos.toFixed(2)} `} color="var(--color-primary)" />
-            </div>
-
-            <div className="admin-table-wrap glass-panel" style={{ padding: '20px' }}>
-                <h3 style={{ marginBottom: '15px', color: 'var(--color-primary)' }}>Transações Recentes</h3>
-                {recentTransactions.length === 0 ? <p className="text-muted">Nenhuma transação encontrada.</p> : (
-                    <table className="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Data</th>
-                                <th>Descrição</th>
-                                <th>Valor</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {recentTransactions.map(t => (
-                                <tr key={t.id}>
-                                    <td>{t.date.split('-').reverse().join('/')}</td>
-                                    <td>{t.desc}</td>
-                                    <td style={{ color: t.type === 'expense' ? '#ef4444' : '#4ade80', fontWeight: 'bold' }}>
-                                        {t.type === 'expense' ? '-' : '+'} R$ {Math.abs(t.amount).toFixed(2)}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
-            </div>
-        </div>
-    );
-};
+// ── AI Hub removed ──
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CATEGORIES TAB
 // ══════════════════════════════════════════════════════════════════════════════
-const CategoriesTab = () => {
+export const CategoriesTab = () => {
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -2694,10 +2875,15 @@ const CategoriesTab = () => {
 
     const fetchCategories = useCallback(async () => {
         setLoading(true);
-        const { data } = await supabase.from('gallery_categories').select('*').order('name');
-        setCategories(data || []);
-        setSelectedIds([]);
-        setLoading(false);
+        try {
+            const { data } = await supabase.from('gallery_categories').select('*').order('name');
+            setCategories(data || []);
+            setSelectedIds([]);
+        } catch (err) {
+            console.error("Error fetching categories:", err);
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
     useEffect(() => { fetchCategories(); }, [fetchCategories]);
@@ -2730,7 +2916,7 @@ const CategoriesTab = () => {
     };
 
     const remove = async (id) => {
-        if (!confirm('Excluir esta categoria? Isso pode afetar imagens na galeria.')) return;
+        if (!(await myConfirm('Excluir esta categoria? Isso pode afetar imagens na galeria.'))) return;
         const { error } = await supabase.from('gallery_categories').delete().eq('id', id);
         if (error) alert('Não foi possível excluir a categoria. Talvez existam fotos vinculadas a ela.');
         setCategories(prev => prev.filter(c => c.id !== id));
@@ -2750,7 +2936,7 @@ const CategoriesTab = () => {
         if (!bulkAction || selectedIds.length === 0) return;
 
         if (bulkAction === 'delete') {
-            if (!confirm(`ATENÇÃO: Excluir ${selectedIds.length} categoria(s) pode afetar imagens na galeria.\n\nTem certeza que deseja continuar?`)) return;
+            if (!(await myConfirm(`ATENÇÃO: Excluir ${selectedIds.length} categoria(s) pode afetar imagens na galeria.\n\nTem certeza que deseja continuar?`))) return;
             const { error } = await supabase.from('gallery_categories').delete().in('id', selectedIds);
             if (error) alert('Ocorreu um erro ao excluir algumas categorias. Talvez existam fotos vinculadas a elas.');
             setCategories(prev => prev.filter(c => !selectedIds.includes(c.id)));
@@ -2762,6 +2948,11 @@ const CategoriesTab = () => {
 
     return (
         <div className="fade-in">
+            <MiniTutorial 
+                id="categories_guide" 
+                title="Sua Vitrine de Trabalhos" 
+                text="Organize sua galeria por categorias (Cortes, Barbas, etc). Isso ajuda o cliente a encontrar o estilo que mais gosta na hora de agendar." 
+            />
             <div className="admin-section-header">
                 <h2 className="admin-section-title">Categorias da Galeria</h2>
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -2783,7 +2974,10 @@ const CategoriesTab = () => {
                 </div>
             )}
 
-            {loading ? <div className="admin-loading">Carregando categorias...</div> : (
+            {loading ? <div className="admin-loading" style={{ padding: '60px', textAlign: 'center' }}>
+                <RefreshCw size={40} className="spin-animation" style={{ color: 'var(--color-primary)', marginBottom: '16px' }} />
+                <p>Sincronizando categorias...</p>
+            </div> : (
                 <div className="admin-table-wrap glass-panel">
                     <table className="admin-table">
                         <thead>
@@ -2847,7 +3041,7 @@ const CategoriesTab = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 // PROMOTION INTERESTS TAB
 // ══════════════════════════════════════════════════════════════════════════════
-const PromotionInterestsTab = () => {
+export const PromotionInterestsTab = () => {
     const { siteData } = useContext(SiteContext);
     const [interests, setInterests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -2883,7 +3077,7 @@ const PromotionInterestsTab = () => {
     };
 
     const removeInterest = async (id) => {
-        if (!confirm('Deseja excluir este registro?')) return;
+        if (!(await myConfirm('Deseja excluir este registro?'))) return;
         await supabase.from('promotion_interests').delete().eq('id', id);
         fetchInterests();
     };
@@ -2994,8 +3188,8 @@ const PromotionInterestsTab = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 // GALLERY TAB
 // ══════════════════════════════════════════════════════════════════════════════
-const GalleryTab = () => {
-    const { fetchImagesAndContext: fetchContext } = useContext(SiteContext);
+export const GalleryTab = () => {
+    const { updateSiteData: fetchContext } = useContext(SiteContext);
     const [images, setImages] = useState([]);
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -3007,13 +3201,18 @@ const GalleryTab = () => {
 
     const fetchImages = useCallback(async () => {
         setLoading(true);
-        const [imgsRes, catsRes] = await Promise.all([
-            supabase.from('gallery').select('*, gallery_categories(name)').order('featured', { ascending: false }).order('created_at', { ascending: false }),
-            supabase.from('gallery_categories').select('*').order('name')
-        ]);
-        setImages(imgsRes.data || []);
-        setCategories(catsRes.data || []);
-        setLoading(false);
+        try {
+            const [imgsRes, catsRes] = await Promise.all([
+                supabase.from('gallery').select('*, gallery_categories(name)').order('featured', { ascending: false }).order('created_at', { ascending: false }).limit(20),
+                supabase.from('gallery_categories').select('*').order('name')
+            ]);
+            setImages(imgsRes.data || []);
+            setCategories(catsRes.data || []);
+        } catch (err) {
+            console.error("Error fetching gallery images:", err);
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
     useEffect(() => { fetchImages(); }, [fetchImages]);
@@ -3030,7 +3229,7 @@ const GalleryTab = () => {
 
     const fetchImagesAndContext = () => {
         fetchImages();
-        fetchContext();
+        fetchContext(); // correctly aliased to updateSiteData
     };
 
     const openNew = () => { setForm({ image_url: '', category_id: '', featured: false }); setShowModal(true); };
@@ -3074,7 +3273,7 @@ const GalleryTab = () => {
     };
 
     const remove = async (id) => {
-        if (!confirm('Excluir esta foto da galeria?')) return;
+        if (!(await myConfirm('Excluir esta foto da galeria?'))) return;
         await supabase.from('gallery').delete().eq('id', id);
         fetchImagesAndContext();
     };
@@ -3110,7 +3309,10 @@ const GalleryTab = () => {
                 <button className="admin-add-btn neon-glow" onClick={openNew}><Plus size={16} /> <span>Nova Foto</span></button>
             </div>
 
-            {loading ? <div className="admin-loading">Carregando galeria...</div> : (
+            {loading ? <div className="admin-loading" style={{ padding: '60px', textAlign: 'center' }}>
+                <RefreshCw size={40} className="spin-animation" style={{ color: 'var(--color-primary)', marginBottom: '16px' }} />
+                <p>Revelando sua galeria...</p>
+            </div> : (
                 <div className="admin-gallery-grid">
                     {images.map((img, idx) => (
                         <div key={img.id} className="glass-panel portfolio-item" onClick={() => openLightbox(img, idx)}>
