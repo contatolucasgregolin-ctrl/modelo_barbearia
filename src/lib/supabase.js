@@ -4,8 +4,19 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-// Cliente Supabase
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Cliente Supabase com config otimizada
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage,
+        storageKey: 'studioflow-auth-token',
+        flowType: 'implicit',
+        // Desabilita Web Locks API para evitar o erro "Navigator LockManager timed out"
+        lock: (name, acquireTimeout, fn) => fn(),
+    }
+})
 
 /**
  * Upload de arquivo para o Supabase Storage

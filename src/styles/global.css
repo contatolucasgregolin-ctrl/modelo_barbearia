@@ -1,52 +1,107 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@400;600;700&family=Poppins:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Montserrat:wght@400;600;700;800;900&display=swap');
+
+/* ═══════════════════════════════════════════════════════════
+   STUDIOFLOW — PREMIUM SaaS DESIGN SYSTEM
+   Inspired by Dribbble / Awwwards / Modern SaaS
+   ═══════════════════════════════════════════════════════════ */
 
 :root {
-  /* Colors - INK HAVEN THEME */
-  --color-bg: #0B0B0B;
-  --color-surface: #111111;
-  --color-surface-hover: #1A1A1A;
-  --color-primary: #FF7A00;
-  /* Vibrant Orange */
-  --color-primary-hover: #E66E00;
-  --color-glow: rgba(255, 122, 0, 0.15);
-  --color-text: #FFFFFF;
-  --color-text-light: #E0E0E0;
-  --color-text-muted: #888888;
-  --color-border: #222222;
+  /* ── Core Palette (Dark Mode Default) ── */
+  --color-bg:            #0a0a0f;
+  --color-bg-subtle:     #0e0e14;
+  --color-surface:       #12121a;
+  --color-surface-hover: #1a1a24;
+  --color-surface-raised:#181822;
+
+  /* ── Brand ── */
+  --color-primary:       #FF7A00;
+  --color-primary-hover: #FF6600;
+  --color-primary-soft:  rgba(255, 122, 0, 0.12);
+  --color-primary-glow:  rgba(255, 122, 0, 0.25);
+  --color-glow:          rgba(255, 122, 0, 0.10);
+
+  /* ── Accent Colors ── */
+  --color-success:       #22c55e;
+  --color-warning:       #f59e0b;
+  --color-danger:        #ef4444;
+  --color-info:          #3b82f6;
+  --color-purple:        #8b5cf6;
+
+  /* ── Text ── */
+  --color-text:          #f1f1f4;
+  --color-text-light:    #c4c4cc;
+  --color-text-muted:    #6b6b7b;
+
+  /* ── Borders ── */
+  --color-border:        rgba(255, 255, 255, 0.06);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+
+  /* ── Spacing Scale ── */
+  --spacing-xs:  0.5rem;
+  --spacing-sm:  1rem;
+  --spacing-md:  1.5rem;
+  --spacing-lg:  2rem;
+  --spacing-xl:  3rem;
+  --spacing-2xl: 4rem;
+
+  /* ── Radius Scale ── */
+  --radius-xs:  6px;
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  20px;
+  --radius-2xl: 24px;
+  --radius-full:9999px;
+
+  /* ── Transitions ── */
+  --transition-fast:   0.15s ease;
+  --transition-normal: 0.25s ease;
+  --transition-smooth: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── Shadows ── */
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md:   0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg:   0 8px 32px rgba(0,0,0,0.5);
+  --shadow-xl:   0 16px 48px rgba(0,0,0,0.6);
+  --shadow-glow: 0 0 20px rgba(255,122,0,0.15);
+
+  /* ── Sidebar ── */
+  --sidebar-width: 260px;
+  --sidebar-collapsed: 72px;
+  --topbar-height: 64px;
 }
 
+/* ─── LIGHT THEME ─────────────────────────────────────────── */
 [data-theme="light"] {
-  --color-bg: #f6f7fb;
-  --color-surface: #ffffff;
-  --color-surface-hover: #f1f3f5;
-  --color-primary: #FF7A00;
+  --color-bg:            #f5f6fa;
+  --color-bg-subtle:     #eef0f6;
+  --color-surface:       #ffffff;
+  --color-surface-hover: #f8f9fb;
+  --color-surface-raised:#ffffff;
+
+  --color-primary:       #FF7A00;
   --color-primary-hover: #E66E00;
-  --color-glow: rgba(255, 122, 0, 0.15);
-  --color-text: #111111;
-  --color-text-light: #333333;
-  --color-text-muted: #444444;
-  --color-border: #e6e6e6;
+  --color-primary-soft:  rgba(255, 122, 0, 0.08);
+  --color-primary-glow:  rgba(255, 122, 0, 0.15);
+  --color-glow:          rgba(255, 122, 0, 0.08);
+
+  --color-text:          #111827;
+  --color-text-light:    #374151;
+  --color-text-muted:    #6b7280;
+
+  --color-border:        #e5e7eb;
+  --color-border-strong: #d1d5db;
+
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:   0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg:   0 8px 24px rgba(0,0,0,0.10);
+  --shadow-xl:   0 16px 48px rgba(0,0,0,0.12);
+  --shadow-glow: 0 0 20px rgba(255,122,0,0.08);
 }
 
-:root {
-
-  /* Spacing */
-  --spacing-xs: 0.5rem;
-  --spacing-sm: 1rem;
-  --spacing-md: 1.5rem;
-  --spacing-lg: 2rem;
-  --spacing-xl: 3rem;
-
-  /* Radius */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  /* Standardized to 18px per request */
-
-  /* Transitions */
-  --transition-fast: 0.2s ease;
-  --transition-normal: 0.3s ease;
-}
+/* ═══════════════════════════════════════════════════════════
+   BASE RESETS & GLOBAL STYLES
+   ═══════════════════════════════════════════════════════════ */
 
 html {
   scroll-behavior: smooth;
@@ -57,54 +112,36 @@ html {
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--color-bg);
-  background: radial-gradient(circle at top right, rgba(255, 122, 0, 0.05), transparent 40%),
-    radial-gradient(circle at bottom left, rgba(255, 122, 0, 0.03), transparent 40%) var(--color-bg);
-  background-attachment: fixed;
   color: var(--color-text);
   line-height: 1.6;
   overflow-x: hidden;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color var(--transition-smooth), color var(--transition-smooth);
+  /* Security rules */
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -webkit-touch-callout: none;
 }
 
-body[data-theme="light"] {
-  background: var(--color-bg);
-}
-
-body[data-theme="light"] .glass-panel {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  border: 1px solid var(--color-border);
-}
-
-
-
-h1,
-h2,
-h3,
-h4,
-.hero-title,
-.page-title {
+/* ── Typography ── */
+h1, h2, h3, h4, .hero-title, .page-title {
   font-family: 'Montserrat', sans-serif;
   font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1.2;
+  line-height: 1.15;
+  color: var(--color-text);
 }
 
-h1 {
-  font-size: clamp(2rem, 6vw, 3.5rem);
-}
-
-h2 {
-  font-size: clamp(1.5rem, 5vw, 2.5rem);
-}
-
-h3 {
-  font-size: clamp(1.2rem, 4vw, 1.8rem);
-}
+h1 { font-size: clamp(2rem, 6vw, 3.5rem); }
+h2 { font-size: clamp(1.5rem, 5vw, 2.5rem); }
+h3 { font-size: clamp(1.1rem, 3vw, 1.5rem); }
 
 button {
   font-family: inherit;
@@ -121,58 +158,21 @@ a {
 img {
   max-width: 100%;
   display: block;
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
-/* Utilities */
+/* ═══════════════════════════════════════════════════════════
+   LAYOUT UTILITIES
+   ═══════════════════════════════════════════════════════════ */
+
 .container {
   width: 100%;
   max-width: 800px;
-  /* Mobile first optimal width, scaled up for premium desktop app-feel */
   margin: 0 auto;
   padding: 0 var(--spacing-sm);
 }
 
-.text-center {
-  text-align: center;
-}
-
-.flex {
-  display: flex;
-}
-
-.flex-col {
-  flex-direction: column;
-}
-
-.items-center {
-  align-items: center;
-}
-
-.justify-between {
-  justify-content: space-between;
-}
-
-.gap-sm {
-  gap: var(--spacing-sm);
-}
-
-.gap-md {
-  gap: var(--spacing-md);
-}
-
-.grid {
-  display: grid;
-}
-
-.grid-cols-2 {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.text-primary {
-  color: var(--color-primary) !important;
-}
-
-/* App Routing Wrappers */
 .app-root {
   min-height: 100vh;
   display: flex;
@@ -183,22 +183,35 @@ img {
   flex: 1;
 }
 
-/* ── Standardized Form Controls ── */
-/*
-  These styles apply to all inputs, textareas, and selects
-  across the entire application for consistency.
-*/
+/* Utility Classes */
+.text-center   { text-align: center; }
+.text-primary  { color: var(--color-primary) !important; }
+.flex          { display: flex; }
+.flex-col      { flex-direction: column; }
+.items-center  { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-sm        { gap: var(--spacing-sm); }
+.gap-md        { gap: var(--spacing-md); }
+.grid          { display: grid; }
+.grid-cols-2   { grid-template-columns: repeat(2, 1fr); }
+
+/* ═══════════════════════════════════════════════════════════
+   STANDARDIZED FORM CONTROLS (Premium)
+   ═══════════════════════════════════════════════════════════ */
+
 .app-form-control {
   width: 100%;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1.5px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
   color: var(--color-text);
   font-family: inherit;
   font-size: 0.95rem;
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  transition: border-color var(--transition-normal),
+              box-shadow var(--transition-normal),
+              background var(--transition-normal);
   -webkit-appearance: none !important;
   -moz-appearance: none !important;
   appearance: none !important;
@@ -208,30 +221,31 @@ img {
 }
 
 .app-form-control::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--color-text-muted);
+  opacity: 0.7;
 }
 
 .app-form-control:focus {
   border-color: var(--color-primary);
-  background: rgba(255, 255, 255, 0.09);
-  box-shadow: 0 0 0 3px rgba(255, 122, 0, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 3px var(--color-primary-glow);
 }
 
-/* Custom dropdown arrow for select - using shorthand to prevent tiling */
+/* Custom dropdown arrow */
 select.app-form-control {
-  /* background shorthand: color image repeat position / size */
-  background: rgba(255, 255, 255, 0.06) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23aaaaaa' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 12px center / 20px 20px !important;
-  background-repeat: no-repeat !important;
+  background: rgba(255, 255, 255, 0.04)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b6b7b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")
+    no-repeat right 12px center / 18px 18px !important;
   padding-right: 44px;
   cursor: pointer;
 }
 
 select.app-form-control option {
-  background: #1a1a1a;
-  color: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
-/* Light Theme Overrides */
+/* Light Theme Form Overrides */
 [data-theme="light"] .app-form-control {
   background: #ffffff;
   border-color: #d1d5db;
@@ -245,12 +259,13 @@ select.app-form-control option {
 [data-theme="light"] .app-form-control:focus {
   border-color: var(--color-primary);
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(255, 122, 0, 0.08);
+  box-shadow: 0 0 0 3px rgba(255, 122, 0, 0.10);
 }
 
 [data-theme="light"] select.app-form-control {
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23555' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 12px center / 20px 20px !important;
-  background-repeat: no-repeat !important;
+  background: #ffffff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")
+    no-repeat right 12px center / 18px 18px !important;
   border-color: #d1d5db;
 }
 
@@ -259,7 +274,7 @@ select.app-form-control option {
   color: #1a1a1a;
 }
 
-/* Custom Checkbox */
+/* Checkbox */
 input[type="checkbox"] {
   accent-color: var(--color-primary);
   width: 18px;
@@ -267,9 +282,84 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   CUSTOM SCROLLBAR
+   ═══════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.12);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.2);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   THEME TOGGLE BUTTON
+   ═══════════════════════════════════════════════════════════ */
+
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  flex-shrink: 0;
+}
+
+.theme-toggle-btn:hover {
+  background: rgba(255,255,255,0.10);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.theme-toggle-btn.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-color: rgba(255,122,0,0.3);
+}
+
+[data-theme="light"] .theme-toggle-btn {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #6b7280;
+}
+
+[data-theme="light"] .theme-toggle-btn:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════ */
+
 @media (max-width: 767px) {
   .main-content {
-    /* Space for mobile Bottom Nav */
     padding-bottom: 80px;
   }
 }

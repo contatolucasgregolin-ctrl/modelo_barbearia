@@ -90,69 +90,85 @@ const Schedule = () => {
         }
     };
 
-    const finishScheduling = () => {
-        // Build WhatsApp URL FIRST — must be synchronous to avoid popup blocker
-        const phoneNumber = siteData.contact.whatsapp;
-        let message = `*Novo Agendamento Barbearia* ✂️\n`;
-        message += `---------------------------\n`;
-        message += `*Cliente:* ${clientName}\n`;
-        message += `*Contato:* ${clientPhone}\n`;
-        message += `---------------------------\n`;
-        message += `*Serviço:* ${selectedService.name} (R$ ${selectedService.price})\n`;
-        message += `*Profissional:* ${selectedBarber.name}\n`;
-        message += `*Data:* ${selectedDate.split('-').reverse().join('/')}\n`;
-        message += `*Horário:* ${selectedTime}\n`;
-        if (clientDescription) message += `*Descrição da tatuagem:* ${clientDescription}\n`;
+    const finishScheduling = async () => {
+        setIsSubmitting(true);
+        try {
+            // 1. Upsert Customer by Phone
+            let customerId = null;
+            const { data: existing, error: custFetchError } = await supabase
+                .from('customers')
+                .select('id')
+                .eq('phone', clientPhone)
+                .maybeSingle();
 
-        const encodedMessage = encodeURIComponent(message);
-        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
-
-        // Open WhatsApp immediately (synchronous — not blocked by browser)
-        window.open(whatsappUrl, '_blank');
-
-        // Show Success Modal — stays visible until the user explicitly closes it
-        setShowSuccessModal(true);
-
-        // Save to Supabase in background (fire-and-forget)
-        (async () => {
-            try {
-                // 1. Upsert Customer by Phone
-                let customerId = null;
-                const { data: existing } = await supabase.from('customers').select('id').eq('phone', clientPhone).limit(1);
-
-                if (existing && existing.length > 0) {
-                    customerId = existing[0].id;
-                } else {
-                    const { data: newCust } = await supabase.from('customers').insert([{
-                        name: clientName,
-                        phone: clientPhone
-                    }]).select('id').single();
-                    if (newCust) customerId = newCust.id;
-                }
-
-                // 2. Insert Appointment
-                if (customerId) {
-                    const { error: appError } = await supabase.from('appointments').insert([{
-                        customer_id: customerId,
-                        artist_id: selectedBarber.id,
-                        service_id: selectedService.id,
-                        date: selectedDate,
-                        time: selectedTime,
-                        description: clientDescription,
-                        session_price: selectedService.price,
-                        status: 'pending'
-                    }]);
-
-                    if (appError) {
-                        console.error('Supabase appointment insert failed:', appError);
-                    }
-                } else {
-                    console.error('Failure: customerId is null, cannot insert appointment');
-                }
-            } catch (err) {
-                console.warn('Supabase save failed:', err);
+            if (existing) {
+                customerId = existing.id;
+            } else {
+                const { data: newCust, error: custInsertError } = await supabase.from('customers').insert([{
+                    name: clientName,
+                    phone: clientPhone
+                }]).select('id').single();
+                
+                if (custInsertError) throw custInsertError;
+                if (newCust) customerId = newCust.id;
             }
-        })();
+
+            if (!customerId) throw new Error('Não foi possível identificar ou criar o cliente.');
+
+            // 2. Insert Appointment
+            const appointmentData = {
+                customer_id: customerId,
+                artist_id: selectedBarber.id,
+                service_id: selectedService.id,
+                date: selectedDate,
+                time: selectedTime,
+                description: clientDescription,
+                session_price: selectedService.price,
+                status: 'pending'
+            };
+
+            console.log("Tentando inserir agendamento:", appointmentData);
+
+            const { data: insertedApp, error: appError } = await supabase
+                .from('appointments')
+                .insert([appointmentData])
+                .select();
+
+            if (appError) {
+                console.error("Erro detalhado do Supabase:", appError);
+                throw new Error(`Erro no banco: ${appError.message} (Código: ${appError.code})`);
+            }
+
+            console.log("Sucesso ao inserir agendamento!", insertedApp);
+
+            // 3. Build WhatsApp URL
+            const phoneNumber = siteData.contact.whatsapp;
+            let message = `*Novo Agendamento Barbearia* ✂️\n`;
+            message += `---------------------------\n`;
+            message += `*Cliente:* ${clientName}\n`;
+            message += `*Contato:* ${clientPhone}\n`;
+            message += `---------------------------\n`;
+            message += `*Serviço:* ${selectedService.name} (R$ ${selectedService.price})\n`;
+            message += `*Profissional:* ${selectedBarber.name}\n`;
+            message += `*Data:* ${selectedDate.split('-').reverse().join('/')}\n`;
+            message += `*Horário:* ${selectedTime}\n`;
+            if (clientDescription) message += `*Descrição:* ${clientDescription}\n`;
+
+            const encodedMessage = encodeURIComponent(message);
+            const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+
+            // Open WhatsApp
+            window.open(whatsappUrl, '_blank');
+
+            // Show Success Modal
+            setShowSuccessModal(true);
+
+        } catch (err) {
+            console.error('Erro ao agendar:', err);
+            alert('Ops! Houve um erro ao salvar seu agendamento no sistema: ' + (err.message || 'Erro de conexão'));
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const isStepValid = () => {

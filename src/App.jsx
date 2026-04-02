@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, useLocation, Outlet } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { SiteProvider } from './context/SiteContext';
+import { AuthProvider } from './context/AuthContext';
+import SecurityShield from './components/SecurityShield';
 
 import Home from './pages/Home';
 
@@ -10,8 +12,9 @@ import Portfolio from './pages/Portfolio';
 import Contact from './pages/Contact';
 import Admin from './pages/Admin';
 import Products from './pages/Products';
-import Login from './pages/Login';
+import BarberPanel from './pages/BarberPanel';
 import ProtectedRoute from './components/ProtectedRoute';
+import Login from './pages/Login';
 
 // Placeholder Pages - Removed as all are implemented
 
@@ -22,11 +25,15 @@ import Header from './components/Header';
 function App() {
   return (
     <SiteProvider>
-      <Router>
-        <div className="app-root">
-          <AppRoutes />
-        </div>
-      </Router>
+      <AuthProvider>
+        <Router>
+          <div className="app-root">
+            <SecurityShield>
+              <AppRoutes />
+            </SecurityShield>
+          </div>
+        </Router>
+      </AuthProvider>
     </SiteProvider>
   );
 }
@@ -58,9 +65,14 @@ function AppRoutes() {
           <Route path="/login" element={<Login />} />
         </Route>
 
-        {/* Admin Routes without Navbar */}
-        <Route path="/admin" element={<ProtectedRoute />}>
+        {/* Admin Routes */}
+        <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route index element={<Admin />} />
+        </Route>
+
+        {/* Barber Routes */}
+        <Route path="/barbeiro" element={<ProtectedRoute allowedRoles={['admin', 'barber']} />}>
+          <Route index element={<BarberPanel />} />
         </Route>
       </Routes>
     </AnimatePresence>
