@@ -8,12 +8,45 @@ import MiniTutorial from '../../components/MiniTutorial';
 // Análise 100% local (sem API externa)
 // ══════════════════════════════════════════════════════════════
 
-const AIPlansPanel = () => {
+const AIPlansPanel = ({ updateSiteData }) => {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState(null);
   const [actionModalPlan, setActionModalPlan] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const savePlanToDatabase = async (plan) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('plans').insert([{
+        title: plan.name,
+        price: parseFloat(plan.price) || 0,
+        period: plan.period || 'por mês',
+        description: plan.description,
+        features: plan.benefits, // The table uses 'features'
+        usage_limits: {
+          cortes: plan.name.toLowerCase().includes('barba') ? 0 : 4,
+          barbas: plan.name.toLowerCase().includes('barba') ? 4 : 0,
+          bebidas: 2
+        },
+        active: true,
+        is_popular: plan.tier === 'gold',
+        whatsapp_message: `Olá! Tenho interesse no plano ${plan.name} que vi no site.`
+      }]);
+
+      if (error) throw error;
+
+      alert('🚀 Campanha Iniciada! O plano já está disponível para seus clientes na página principal.');
+      if (updateSiteData) updateSiteData();
+      setActionModalPlan(null);
+    } catch (err) {
+      console.error('Error saving plan:', err);
+      alert('Erro ao salvar plano: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const analyze = useCallback(async () => {
     setLoading(true);
@@ -60,8 +93,8 @@ const AIPlansPanel = () => {
       ? Object.values(customerVisits).reduce((a, b) => a + b, 0) / Object.values(customerVisits).length : 0;
     const avgSpend = Object.values(customerSpend).length > 0
       ? Object.values(customerSpend).reduce((a, b) => a + b, 0) / Object.values(customerSpend).length : 0;
-    const avgTicket = apts.length > 0
-      ? apts.reduce((a, b) => a + parseFloat(b.session_price || 0), 0) / apts.length : 0;
+    const avgTicketTotal = apts.reduce((a, b) => a + parseFloat(b.session_price || 0), 0);
+    const avgTicket = apts.length > 0 ? avgTicketTotal / apts.length : (services.length > 0 ? parseFloat(services[0].price) : 50);
 
     // Top services
     const topServices = Object.entries(servicePopularity)
@@ -442,11 +475,18 @@ ${plan.benefits.map(b => `  • ${b}`).join('\n')}
                     <button className="admin-btn-secondary" style={{ flex: 1 }} onClick={() => setActionModalPlan(null)}>
                       Fechar
                     </button>
-                    <button className="admin-btn-primary neon-glow" style={{ flex: 2, background: '#10b981' }} onClick={() => {
-                      alert('Campanha marcada como ativa! O sistema monitorará as novas assinaturas.');
-                      setActionModalPlan(null);
-                    }}>
-                      <Check size={18} /> Iniciar Campanha Agora
+                    <button 
+                      className="admin-btn-primary neon-glow" 
+                      style={{ flex: 2, background: '#10b981' }} 
+                      disabled={saving}
+                      onClick={() => savePlanToDatabase(actionModalPlan)}
+                    >
+                      {saving ? (
+                        <RefreshCw size={18} className="spin-animation" />
+                      ) : (
+                        <Check size={18} />
+                      )}
+                      {saving ? 'Salvando...' : 'Iniciar Campanha Agora'}
                     </button>
                   </div>
                 </div>

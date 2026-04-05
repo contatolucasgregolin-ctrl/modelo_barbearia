@@ -74,24 +74,28 @@
 }
 
 .soon-badge {
-    position: absolute;
-    top: 12px;
-    right: 12px;
     background: rgba(255, 98, 0, 0.1);
-    border: 1px solid #FF6200;
+    border: 1px solid rgba(255, 98, 0, 0.4);
     color: #FF6200;
-    font-size: 0.6rem;
+    font-size: 0.62rem;
     font-weight: 800;
     text-transform: uppercase;
-    padding: 2px 8px;
-    border-radius: 10px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+    align-self: flex-start;
+    margin-top: 2px;
+    flex-shrink: 0; /* Prevents squashing */
 }
 
 .product-category-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start; /* Alinhamento por cima para manter o ícone e título na mesma linha inicial */
     gap: 16px;
     margin-bottom: 20px;
+    position: relative;
+    width: 100%;
 }
 
 .product-icon-wrapper {
@@ -104,12 +108,34 @@
     border: 1px solid var(--color-border);
     border-radius: 10px;
     color: var(--color-primary);
+    flex-shrink: 0;
+}
+
+.product-category-header > div:nth-child(2) {
+    flex: 1;
+    min-width: 0; /* Essencial para que o flex-shrink e text-overflow funcionem */
 }
 
 .product-category-header h3 {
+    margin: 0;
     font-size: 1.1rem;
     color: var(--color-text);
     text-transform: uppercase;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2; /* Standard property for compatibility */
+    -webkit-box-orient: vertical;
+}
+
+.product-category-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--color-text);
+    text-transform: uppercase;
+    line-height: 1.2;
 }
 
 .product-desc {
@@ -133,6 +159,14 @@
     gap: 10px;
     font-size: 0.85rem;
     color: #A0A0A0;
+    width: 100%;
+}
+
+.product-preview-item span:nth-of-type(1) {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .product-dot {

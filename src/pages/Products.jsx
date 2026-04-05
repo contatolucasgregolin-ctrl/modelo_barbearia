@@ -98,20 +98,18 @@ const Products = () => {
                         variants={fadeInUp}
                         whileHover={{ scale: 1.02 }}
                     >
-                        {/* Soon badge */}
-                        {cat.soon && (
-                            <div className="soon-badge">Em breve</div>
-                        )}
-
                         {/* Category info */}
                         <div className="product-category-header">
                             <div className="product-icon-wrapper">
                                 <cat.icon size={28} />
                             </div>
-                            <div>
+                            <div style={{ flex: 1 }}>
                                 <h3>{cat.shortName || cat.name}</h3>
                                 <p className="product-desc">{cat.desc}</p>
                             </div>
+                            {cat.soon && (
+                                <div className="soon-badge">Em breve</div>
+                            )}
                         </div>
 
                         {/* Product list preview */}

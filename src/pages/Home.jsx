@@ -12,6 +12,7 @@ const Home = () => {
     const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [artists, setArtists] = useState([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [subFormData, setSubFormData] = useState({
         name: '',
         phone: '',
@@ -80,28 +81,25 @@ const Home = () => {
 
                 {/* PROMOTION OF THE WEEK */}
                 {activePromotions.length > 0 && (
-                    <div className="app-promotions-container fade-in" style={{ marginTop: '20px' }}>
+                    <div className="app-promotions-container fade-in">
                         {activePromotions.map(promo => (
-                            <div key={promo.id} className="app-promo-card neon-glow" style={{
-                                borderRadius: '16px',
-                                marginBottom: '24px',
-                                background: 'var(--color-surface, #141414)',
-                                border: '1px solid var(--color-primary)'
-                            }}>
+                            <div key={promo.id} className="app-promo-card">
                                 {promo.image_url && (
-                                    <img src={promo.image_url} alt={promo.title} style={{ width: '100%', height: '200px', objectFit: 'cover', display: 'block', borderRadius: '16px 16px 0 0' }} />
+                                    <div className="promo-image-wrapper">
+                                        <div className="promo-badge">PROMOÇÃO</div>
+                                        <img src={promo.image_url} alt={promo.title} />
+                                    </div>
                                 )}
-                                <div style={{ padding: '24px', textAlign: 'center', position: 'relative' }}>
-                                    <div style={{ position: 'absolute', top: '-14px', right: '12px', background: 'var(--color-primary)', color: '#000', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800 }}>PROMOÇÃO</div>
-                                    <h3 style={{ fontFamily: 'Montserrat, sans-serif', fontSize: '1.4rem', color: 'var(--color-text)', marginBottom: '8px', textTransform: 'uppercase' }}>{promo.title}</h3>
-                                    <p style={{ color: 'var(--color-text-muted)', fontSize: '1rem', whiteSpace: 'pre-line', marginBottom: '20px', lineHeight: '1.5' }}>{promo.description}</p>
+                                <div className="promo-content">
+                                    {!promo.image_url && <div className="promo-badge">PROMOÇÃO</div>}
+                                    <h3 className="promo-title">{promo.title}</h3>
+                                    <p className="promo-description">{promo.description}</p>
                                     <button
                                         type="button"
-                                        className="btn-app-primary"
-                                        style={{ width: '100%' }}
+                                        className="promo-action-btn"
                                         onClick={() => openPromoModal(promo)}
                                     >
-                                        APROVEITAR PROMOÇÃO
+                                        APROVEITAR ESTA OFERTA
                                     </button>
                                 </div>
                             </div>
@@ -260,6 +258,8 @@ const Home = () => {
 
                         <form onSubmit={async (e) => {
                             e.preventDefault();
+                            if (isSubmitting) return;
+                            setIsSubmitting(true);
                             try {
                                 // 1. Find or create customer
                                 let customerId;
@@ -292,12 +292,23 @@ const Home = () => {
 
                                 if (error) throw error;
 
+                                await Swal.fire({
+                                    title: 'Solicitação Enviada!',
+                                    text: 'Agora vamos finalizar sua assinatura no WhatsApp.',
+                                    icon: 'success',
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                });
+
                                 const msg = encodeURIComponent(`Olá! Gostaria de assinar o plano "${selectedPlan.title}". Meu nome é ${subFormData.name}.`);
-                                window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=${msg}`, '_blank');
+                                const waUrl = `https://wa.me/${(siteData.contact.whatsapp || '').replace(/\D/g, '')}?text=${msg}`;
+                                window.open(waUrl, '_blank');
                                 setIsPlanModalOpen(false);
                             } catch (error) {
                                 console.error('Error saving subscription:', error);
-                                alert('Erro ao registrar interesse: ' + error.message);
+                                Swal.fire('Erro', 'Não foi possível processar sua solicitação: ' + error.message, 'error');
+                            } finally {
+                                setIsSubmitting(false);
                             }
                         }}>
                             <div className="modal-form">
@@ -364,8 +375,8 @@ const Home = () => {
                                 </div>
 
                                 <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '10px', paddingBottom: '10px' }}>
-                                    <button type="submit" className="btn-app-primary" style={{ padding: '14px 20px', width: '100%', maxWidth: '300px', fontSize: '0.9rem' }}>
-                                        Confirmar e Ir para o WhatsApp
+                                    <button type="submit" className="btn-app-primary" style={{ padding: '14px 20px', width: '100%', maxWidth: '300px', fontSize: '0.9rem' }} disabled={isSubmitting}>
+                                        {isSubmitting ? 'PROCESSANDO...' : 'CONFIRMAR E IR PARA O WHATSAPP'}
                                     </button>
                                 </div>
                             </div>
@@ -387,6 +398,8 @@ const Home = () => {
 
                         <form onSubmit={async (e) => {
                             e.preventDefault();
+                            if (isSubmitting) return;
+                            setIsSubmitting(true);
                             try {
                                 const { error } = await supabase.from('promotion_interests').insert([{
                                     promotion_id: selectedPromo.id,
@@ -398,12 +411,23 @@ const Home = () => {
 
                                 if (error) throw error;
 
+                                await Swal.fire({
+                                    title: 'Interesse Registrado!',
+                                    text: 'Agora vamos falar no WhatsApp para agendar seu horário.',
+                                    icon: 'success',
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                });
+
                                 const msg = encodeURIComponent(`Olá! Gostaria de aproveitar a oferta "${selectedPromo.title}". Meu nome é ${promoFormData.name}. Poderia me dar mais informações?`);
-                                window.open(`https://wa.me/${siteData.contact.whatsapp.replace(/\D/g, '')}?text=${msg}`, '_blank');
+                                const waUrl = `https://wa.me/${(siteData.contact.whatsapp || '').replace(/\D/g, '')}?text=${msg}`;
+                                window.open(waUrl, '_blank');
                                 setIsPromoModalOpen(false);
                             } catch (error) {
                                 console.error('Error saving promo interest:', error);
-                                alert('Erro ao registrar interesse: ' + error.message);
+                                Swal.fire('Erro', 'Não foi possível registrar seu interesse: ' + error.message, 'error');
+                            } finally {
+                                setIsSubmitting(false);
                             }
                         }}>
                             <div className="modal-form">
@@ -443,8 +467,8 @@ const Home = () => {
                                     </select>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '10px', paddingBottom: '10px' }}>
-                                    <button type="submit" className="btn-app-primary" style={{ padding: '14px 20px', width: '100%', maxWidth: '300px', fontSize: '0.9rem' }}>
-                                        CONFIRMAR E IR PARA O WHATSAPP
+                                    <button type="submit" className="btn-app-primary" style={{ padding: '14px 20px', width: '100%', maxWidth: '300px', fontSize: '0.9rem' }} disabled={isSubmitting}>
+                                        {isSubmitting ? 'PROCESSANDO...' : 'CONFIRMAR E IR PARA O WHATSAPP'}
                                     </button>
                                 </div>
                             </div>

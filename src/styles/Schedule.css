@@ -5,12 +5,13 @@
 }
 
 .page-title {
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
     text-align: center;
-    font-size: 2.2rem;
+    font-size: clamp(1.4rem, 6vw, 2.2rem);
     color: var(--color-text);
     text-transform: uppercase;
     letter-spacing: 1px;
+    font-weight: 800;
 }
 
 .steps-indicator {
@@ -59,11 +60,12 @@
 
 .step-content h3 {
     text-align: center;
-    margin-bottom: var(--spacing-lg);
-    font-size: 1.5rem;
+    margin-bottom: var(--spacing-md);
+    font-size: clamp(1.1rem, 4vw, 1.5rem);
     color: var(--color-text);
     text-transform: uppercase;
     letter-spacing: 1px;
+    font-weight: 700;
 }
 
 .selection-list {
@@ -77,14 +79,20 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 18px;
+    padding: 16px;
     background: var(--color-surface);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-border);
     cursor: pointer;
     transition: all 0.2s ease;
+    gap: 12px;
+}
+@media (max-width: 480px) {
+    .selection-card {
+        padding: 14px;
+    }
 }
 
 .selection-card:hover {
@@ -174,8 +182,18 @@
 
 .time-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+@media (max-width: 600px) {
+    .time-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+@media (max-width: 380px) {
+    .time-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 .time-btn {
@@ -293,9 +311,7 @@ body:not([data-theme="light"]) .form-input::-webkit-calendar-picker-indicator {
 }
 
 @media (max-width: 480px) {
-    .time-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
+    /* Rules consolidated above */
 }
 
 /* Success Modal Overlay */

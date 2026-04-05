@@ -1,21 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Trash2, Save, X, Package, Link2, Hash, HelpCircle, Info, Calculator, Gauge } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { validateNumeric } from '../../lib/SecurityUtils';
 import Swal from 'sweetalert2';
 
 const myConfirm = async (msg) => {
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   const result = await Swal.fire({
     title: 'Atenção',
     text: msg,
     icon: 'warning',
     showCancelButton: true,
-    confirmButtonColor: '#3085d6',
-    cancelButtonColor: '#d33',
     confirmButtonText: 'Sim, confirmar',
     cancelButtonText: 'Cancelar',
-    background: 'var(--bg-glass)',
-    color: 'var(--text-color)'
+    background: isDark ? '#1e2433' : '#ffffff',
+    color: isDark ? '#f8fafc' : '#1e293b',
+    iconColor: '#ff7a00',
+    customClass: {
+      popup: 'admin-swal-popup',
+      confirmButton: 'admin-swal-confirm',
+      cancelButton: 'admin-swal-cancel',
+    },
+    buttonsStyling: false
   });
   return result.isConfirmed;
 };
@@ -34,6 +41,7 @@ const ServiceProductsManager = ({ service, onClose }) => {
   const [newLink, setNewLink] = useState({ product_id: '', quantity_used: '1' });
   const [serviceCost, setServiceCost] = useState(0);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [linkedRes, productsRes] = await Promise.all([
@@ -93,7 +101,7 @@ const ServiceProductsManager = ({ service, onClose }) => {
   const profit = service.price - serviceCost;
   const margin = service.price > 0 ? ((profit / service.price) * 100).toFixed(1) : 0;
 
-  return (
+  return createPortal(
     <div className="admin-modal-overlay" onClick={onClose}>
       <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px' }}>
         <div className="admin-modal-header">
@@ -250,7 +258,7 @@ const ServiceProductsManager = ({ service, onClose }) => {
           </div>
         )}
       </div>
-    </div>
+    </div>, document.body
   );
 };
 

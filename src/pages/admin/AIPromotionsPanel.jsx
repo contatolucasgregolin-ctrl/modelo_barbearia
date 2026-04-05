@@ -12,9 +12,36 @@ import MiniTutorial from '../../components/MiniTutorial';
 // ══════════════════════════════════════════════════════════════
 
 // ─── Componente de Modal de Ação ──────────────────────────────
-const ActionModal = ({ suggestion, onClose }) => {
+const ActionModal = ({ suggestion, onClose, updateSiteData }) => {
   const [copied, setCopied] = useState(null);
   const [archived, setArchived] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+
+  const publishToMain = async () => {
+    if (!suggestion.title || !suggestion.suggestion) {
+      return alert('Erro: Dados da sugestão incompletos para publicação.');
+    }
+    setPublishing(true);
+    try {
+      const { error } = await supabase.from('promotions').insert([{
+        title: suggestion.title,
+        description: suggestion.suggestion,
+        active: true,
+        image_url: null, // AI Promos are currently text-only
+      }]);
+
+      if (error) throw error;
+
+      alert('⭐ Campanha publicada com sucesso na página principal!');
+      if (updateSiteData) await updateSiteData();
+      onClose();
+    } catch (err) {
+      console.error('[AIPromotionsPanel] Error publishing promotion:', err);
+      alert('Erro ao publicar promoção: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   if (!suggestion) return null;
 
@@ -121,6 +148,21 @@ const ActionModal = ({ suggestion, onClose }) => {
             style={{ ...btnStyle(archived ? '#10b981' : '#f59e0b'), background: archived ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.08)', borderColor: archived ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)' }}>
             <Archive size={20} />
             {archived ? '✅ Marcada como implementada!' : 'Marcar como implementada'}
+          </button>
+
+          {/* Publicar Real */}
+          <button
+            disabled={publishing}
+            onClick={publishToMain}
+            style={{ 
+              ...btnStyle('#fff'), 
+              background: 'linear-gradient(135deg, var(--color-primary), #ff9500)', 
+              borderColor: 'rgba(255,122,0,0.5)',
+              marginTop: '10px',
+              justifyContent: 'center'
+            }}>
+            {publishing ? <RefreshCw size={20} className="spin-animation" /> : <Megaphone size={20} />}
+            {publishing ? 'Publicando...' : 'Publicar na Página Principal'}
           </button>
         </div>
 
@@ -232,7 +274,7 @@ const SuggestionCard = ({ s, idx, onAction }) => {
 
 
 // ─── Componente Principal ─────────────────────────────────────
-const AIPromotionsPanel = () => {
+const AIPromotionsPanel = ({ updateSiteData }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
@@ -556,7 +598,11 @@ const AIPromotionsPanel = () => {
 
       {/* Modal de ação */}
       {activeAction && (
-        <ActionModal suggestion={activeAction} onClose={() => setActiveAction(null)} />
+        <ActionModal 
+          suggestion={activeAction} 
+          onClose={() => setActiveAction(null)} 
+          updateSiteData={updateSiteData}
+        />
       )}
     </div>
   );

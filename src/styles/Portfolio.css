@@ -15,11 +15,20 @@
     display: flex;
     gap: 10px;
     overflow-x: auto;
-    padding: 10px 0;
-    margin-bottom: 24px;
+    padding: 10px 20px;
+    margin: 0;
     scrollbar-width: none;
     -ms-overflow-style: none;
     -webkit-overflow-scrolling: touch;
+    width: 100%;
+}
+@media (min-width: 800px) {
+    .portfolio-filter-bar {
+        margin: 0 0 24px 0;
+        justify-content: center;
+        mask-image: none;
+        -webkit-mask-image: none;
+    }
 }
 
 .portfolio-filter-bar::-webkit-scrollbar {
@@ -27,7 +36,6 @@
 }
 
 .filter-btn {
-    padding: 10px 20px;
     padding: 10px 20px;
     border-radius: 20px;
     border: 1px solid var(--color-border);

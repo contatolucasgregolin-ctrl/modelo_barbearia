@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useRef } from 'react';
+import { createContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 export const SiteContext = createContext();
@@ -36,9 +36,9 @@ export const SiteProvider = ({ children }) => {
         localStorage.setItem('app-theme', theme);
     }, [theme]);
 
-    const toggleTheme = () => {
+    const toggleTheme = useCallback(() => {
         setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-    };
+    }, []);
 
     const fetchSiteData = async () => {
         try {
@@ -154,38 +154,51 @@ export const SiteProvider = ({ children }) => {
     useEffect(() => {
         fetchSiteData();
 
+        let debounceTimer;
+        const debouncedFetch = () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                fetchRef.current?.();
+            }, 300);
+        };
+
         // Real-time listeners para atualizar dados automaticamente
         const settingsChannel = supabase.channel('site-settings-realtime')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, () => {
                 console.log('[SiteContext] Settings changed, refreshing...');
-                fetchRef.current?.();
+                debouncedFetch();
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => {
                 console.log('[SiteContext] Services changed, refreshing...');
-                fetchRef.current?.();
+                debouncedFetch();
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'plans' }, () => {
                 console.log('[SiteContext] Plans changed, refreshing...');
-                fetchRef.current?.();
+                debouncedFetch();
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'promotions' }, () => {
                 console.log('[SiteContext] Promotions changed, refreshing...');
-                fetchRef.current?.();
+                debouncedFetch();
             })
             .subscribe();
 
         return () => {
+            clearTimeout(debounceTimer);
             supabase.removeChannel(settingsChannel);
         };
     }, []); // Sem dependência de "theme" — não há razão para re-fetch ao mudar tema
 
-    const updateSiteData = async () => {
+    const updateSiteData = useCallback(async () => {
         setLoading(true);
-        await fetchSiteData();
-    };
+        await fetchRef.current?.();
+    }, []);
+
+    const contextValue = useMemo(() => ({
+        siteData, updateSiteData, loading, theme, toggleTheme
+    }), [siteData, updateSiteData, loading, theme, toggleTheme]);
 
     return (
-        <SiteContext.Provider value={{ siteData, updateSiteData, loading, theme, toggleTheme }}>
+        <SiteContext.Provider value={contextValue}>
             {children}
         </SiteContext.Provider>
     );

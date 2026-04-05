@@ -1,21 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Package, Plus, Minus, X, Save, Search, CheckCircle, AlertTriangle, Scissors } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import MiniTutorial from '../../components/MiniTutorial';
 import Swal from 'sweetalert2';
 
 const myConfirm = async (msg) => {
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   const result = await Swal.fire({
     title: 'Atenção',
     text: msg,
     icon: 'warning',
     showCancelButton: true,
-    confirmButtonColor: '#3085d6',
-    cancelButtonColor: '#d33',
     confirmButtonText: 'Sim, confirmar',
     cancelButtonText: 'Cancelar',
-    background: 'var(--bg-glass)',
-    color: 'var(--text-color)'
+    background: isDark ? '#1e2433' : '#ffffff',
+    color: isDark ? '#f8fafc' : '#1e293b',
+    iconColor: '#ff7a00',
+    customClass: {
+      popup: 'admin-swal-popup',
+      confirmButton: 'admin-swal-confirm',
+      cancelButton: 'admin-swal-cancel',
+    },
+    buttonsStyling: false
   });
   return result.isConfirmed;
 };
@@ -185,10 +192,10 @@ const BarberUsageModal = ({ appointment, onClose, onSaved }) => {
 
   if (!appointment) return null;
 
-  return (
+  return createPortal(
     <div className="admin-modal-overlay" onClick={onClose}>
-      <div className="admin-modal glass-panel" onClick={e => e.stopPropagation()}
-        style={{ maxWidth: '600px', borderRadius: '20px', maxHeight: '90vh', overflow: 'auto' }}>
+      <div className="admin-modal glass-panel fade-in" onClick={e => e.stopPropagation()}
+        style={{ maxWidth: '600px' }}>
 
         {/* Header */}
         <div className="admin-modal-header" style={{ background: 'rgba(255,122,0,0.06)', borderBottom: '1px solid var(--color-border)' }}>
@@ -370,7 +377,8 @@ const BarberUsageModal = ({ appointment, onClose, onSaved }) => {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

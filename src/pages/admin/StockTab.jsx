@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Package, Plus, Search, RefreshCw, Trash2, Pencil, Save, X, Download,
   AlertTriangle, TrendingDown, TrendingUp, ArrowUpCircle, ArrowDownCircle,
@@ -8,23 +9,11 @@ import {
 import MiniTutorial from '../../components/MiniTutorial';
 import { supabase, uploadStorageFile, compressToWebP } from '../../lib/supabase';
 import { sanitizeInput, validateNumeric, validateInteger, sanitizeObject, validateSKU } from '../../lib/SecurityUtils';
+import { myConfirm, myAlert } from '../../lib/utils';
 import Swal from 'sweetalert2';
 
-const myConfirm = async (msg) => {
-  const result = await Swal.fire({
-    title: 'Atenção',
-    text: msg,
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonColor: '#3085d6',
-    cancelButtonColor: '#d33',
-    confirmButtonText: 'Sim, confirmar',
-    cancelButtonText: 'Cancelar',
-    background: 'var(--bg-glass)',
-    color: 'var(--text-color)'
-  });
-  return result.isConfirmed;
-};
+// Standardized helpers are now imported from ../../lib/utils
+
 
 
 
@@ -357,7 +346,7 @@ const ProductsSubTab = () => {
             <tbody>
               {filtered.map(p => (
                 <tr key={p.id} style={p.quantity <= p.min_stock ? { borderLeft: `3px solid ${p.quantity === 0 ? '#ef4444' : '#f59e0b'}` } : {}}>
-                  <td>
+                  <td data-label="Foto">
                     {p.photo_url ? (
                       <img src={p.photo_url} alt={p.name} style={{ width: 36, height: 36, borderRadius: '8px', objectFit: 'cover' }} />
                     ) : (
@@ -366,16 +355,16 @@ const ProductsSubTab = () => {
                       </div>
                     )}
                   </td>
-                  <td>
+                  <td data-label="Produto">
                     <div style={{ fontWeight: 'bold' }}>{p.name}</div>
                     {p.description && <div style={{ fontSize: '0.75rem', color: '#888' }}>{p.description}</div>}
                   </td>
-                  <td style={{ color: '#888', fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.sku || '-'}</td>
-                  <td>{p.product_categories ? `${p.product_categories.icon} ${p.product_categories.name}` : '-'}</td>
-                  <td>R$ {(Number(p.cost) || 0).toFixed(2)}</td>
-                  <td>{p.price > 0 ? `R$ ${(Number(p.price) || 0).toFixed(2)}` : <span style={{ color: '#666' }}>Uso interno</span>}</td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <td data-label="SKU" style={{ color: '#888', fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.sku || '-'}</td>
+                  <td data-label="Categoria">{p.product_categories ? `${p.product_categories.icon} ${p.product_categories.name}` : '-'}</td>
+                  <td data-label="Custo">R$ {(Number(p.cost) || 0).toFixed(2)}</td>
+                  <td data-label="Preço">{p.price > 0 ? `R$ ${(Number(p.price) || 0).toFixed(2)}` : <span style={{ color: '#666' }}>Uso interno</span>}</td>
+                  <td data-label="Estoque">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'inherit' }}>
                       <button className="action-btn" onClick={() => handleQuickAdjust(p, -1)} 
                         style={{ padding: '2px', minWidth: '24px', height: '24px', borderRadius: '4px', background: 'rgba(239,68,68,0.1)' }}>
                         <ChevronDown size={14} color="#ef4444" />
@@ -388,8 +377,8 @@ const ProductsSubTab = () => {
                     </div>
                     <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px' }}>{p.unit}</div>
                   </td>
-                  <td><StockBadge quantity={p.quantity} minStock={p.min_stock} /></td>
-                  <td style={{ textAlign: 'center' }}>
+                  <td data-label="Status"><StockBadge quantity={p.quantity} minStock={p.min_stock} /></td>
+                  <td data-label="Ações" style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                       <button className="action-btn edit" onClick={() => openEdit(p)} title="Editar"><Pencil size={16} /></button>
                       <button className="action-btn delete" onClick={() => remove(p.id)} title="Excluir"><Trash2 size={16} /></button>
@@ -404,7 +393,7 @@ const ProductsSubTab = () => {
       )}
 
       {/* Modal */}
-      {showModal && (
+      {showModal && createPortal(
         <div className="admin-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
             <div className="admin-modal-header">
@@ -531,7 +520,7 @@ const ProductsSubTab = () => {
               </div>
             </div>
           )}
-        </div>
+        </div>, document.body
       )}
     </div>
   );
@@ -666,23 +655,23 @@ const MovementsSubTab = () => {
             <tbody>
               {filtered.map(m => (
                 <tr key={m.id}>
-                  <td style={{ whiteSpace: 'nowrap', fontSize: '0.85rem' }}>
+                  <td data-label="Data/Hora" style={{ whiteSpace: 'nowrap', fontSize: '0.85rem' }}>
                     {new Date(m.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                     {' '}
                     <span style={{ color: '#888' }}>
                       {new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Produto">
                     <div style={{ fontWeight: 'bold' }}>{m.products?.name || '—'}</div>
                     <div style={{ fontSize: '0.75rem', color: '#888', fontFamily: 'monospace' }}>{m.products?.sku}</div>
                   </td>
-                  <td><MovementBadge type={m.type} /></td>
-                  <td style={{ fontWeight: 'bold' }}>{parseFloat(m.quantity).toFixed(m.quantity % 1 ? 3 : 0)}</td>
-                  <td style={{ color: '#888' }}>{m.previous_stock ?? '-'}</td>
-                  <td style={{ fontWeight: 'bold', color: m.type === 'in' ? '#10b981' : '#ef4444' }}>{m.new_stock ?? '-'}</td>
-                  <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.reason || '-'}</td>
-                  <td>
+                  <td data-label="Tipo"><MovementBadge type={m.type} /></td>
+                  <td data-label="Qtd" style={{ fontWeight: 'bold' }}>{parseFloat(m.quantity).toFixed(m.quantity % 1 ? 3 : 0)}</td>
+                  <td data-label="Estoque Anterior" style={{ color: '#888' }}>{m.previous_stock ?? '-'}</td>
+                  <td data-label="Estoque Novo" style={{ fontWeight: 'bold', color: m.type === 'in' ? '#10b981' : '#ef4444' }}>{m.new_stock ?? '-'}</td>
+                  <td data-label="Motivo" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.reason || '-'}</td>
+                  <td data-label="Origem">
                     <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', background: m.reference_type === 'appointment' ? 'rgba(96,165,250,0.15)' : 'rgba(255,255,255,0.05)', color: m.reference_type === 'appointment' ? '#60a5fa' : '#888' }}>
                       {m.reference_type === 'appointment' ? '🔄 Auto' : '✋ Manual'}
                     </span>
@@ -696,7 +685,7 @@ const MovementsSubTab = () => {
       )}
 
       {/* New Movement Modal */}
-      {showModal && (
+      {showModal && createPortal(
         <div className="admin-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="admin-modal-header">
@@ -744,7 +733,7 @@ const MovementsSubTab = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );
@@ -879,11 +868,11 @@ const ReportsSubTab = () => {
             <tbody>
               {profitability.filter(p => p.quantity <= p.min_stock).map(p => (
                 <tr key={p.id}>
-                  <td style={{ fontWeight: 'bold' }}>{p.name}</td>
-                  <td>{p.product_categories?.name || '-'}</td>
-                  <td style={{ fontWeight: 'bold', color: p.quantity === 0 ? '#ef4444' : '#f59e0b' }}>{p.quantity}</td>
-                  <td>{p.min_stock}</td>
-                  <td><StockBadge quantity={p.quantity} minStock={p.min_stock} /></td>
+                  <td data-label="Produto" style={{ fontWeight: 'bold' }}>{p.name}</td>
+                  <td data-label="Categoria">{p.product_categories?.name || '-'}</td>
+                  <td data-label="Estoque Atual" style={{ fontWeight: 'bold', color: p.quantity === 0 ? '#ef4444' : '#f59e0b' }}>{p.quantity}</td>
+                  <td data-label="Mínimo">{p.min_stock}</td>
+                  <td data-label="Status"><StockBadge quantity={p.quantity} minStock={p.min_stock} /></td>
                 </tr>
               ))}
               {profitability.filter(p => p.quantity <= p.min_stock).length === 0 && (

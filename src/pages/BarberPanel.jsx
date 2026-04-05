@@ -7,16 +7,12 @@ import {
     Bell, Moon, Sun, ChevronDown, X, Menu
 } from 'lucide-react';
 
-// Reusing existing tabs from Admin (they are already modularized in Admin.jsx or separate files)
-// For now, I will import the needed sub-components. 
-// Note: In a real refactor, these would be in src/pages/admin/tabs/
-import { 
-    AppointmentsTab, 
-    CustomersTab, 
-    SettingsTab,
-    PromotionInterestsTab,
-    CategoriesTab
-} from './Admin'; 
+// ── Modular Tab Components ──
+import AppointmentsTab from './admin/AppointmentsTab';
+import CustomersTab from './admin/CustomersTab';
+import SettingsTab from './admin/SettingsTab';
+import PromotionInterestsTab from './admin/PromotionInterestsTab';
+import CategoriesTab from './admin/CategoriesTab';
 import AcademyTab from './admin/AcademyTab';
 
 const BarberPanel = () => {

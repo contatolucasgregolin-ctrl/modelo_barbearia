@@ -70,7 +70,7 @@ const DashboardTab = React.memo(({ cachedData, refreshAll }) => {
 
             const serviceCounts = {};
             appointments?.forEach(a => {
-                const sName = a.service_name || a.services?.name || 'Outros';
+                const sName = a.service_name || a.service?.name || 'Outros';
                 serviceCounts[sName] = (serviceCounts[sName] || 0) + 1;
             });
             setServicesData(Object.entries(serviceCounts)
@@ -81,7 +81,7 @@ const DashboardTab = React.memo(({ cachedData, refreshAll }) => {
 
             const barberStats = {};
             appointments?.forEach(a => {
-                const bName = a.barber_name || a.artists?.name || 'N/A';
+                const bName = a.barber_name || a.artist?.name || 'N/A';
                 if (!barberStats[bName]) barberStats[bName] = { name: bName, atendimentos: 0, faturamento: 0 };
                 barberStats[bName].atendimentos += 1;
                 barberStats[bName].faturamento += Number(a.price || 0);
@@ -103,10 +103,18 @@ const DashboardTab = React.memo(({ cachedData, refreshAll }) => {
     }, []);
 
     useEffect(() => {
+        // Se as listas existem (mesmo vazias), processamos e liberamos o loading
         if (cachedData?.appointments && cachedData?.finances) {
             processData(cachedData.appointments, cachedData.finances, cachedData.activeSubs || 0);
             setLoading(false);
         }
+        
+        // Fail-safe para não travar a tela se os dados demorarem ou vierem nulos
+        const timer = setTimeout(() => {
+            setLoading(false);
+        }, 5000);
+        
+        return () => clearTimeout(timer);
     }, [cachedData, processData]);
 
     if (loading && !stats.revenue) return <div className="admin-loading">Gerando insights estratégicos...</div>;
