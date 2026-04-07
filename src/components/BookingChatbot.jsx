@@ -221,7 +221,7 @@ const BookingChatbot = () => {
     useEffect(() => {
         if (isOpen && messages.length === 0) {
             setTimeout(() => botSay(
-                `👋 Olá! Sou o assistente da <strong>${siteData?.name || 'Barbearia'}</strong>.<br/><br/>Informe seu <strong>nome completo</strong> para começarmos o agendamento:`,
+                `👋 Olá! Sou o assistente da <strong>${siteData?.name || 'Barbearia'}</strong>.<br/><br/>Qual o seu <strong>nome completo</strong> para começarmos?`,
                 STEPS.ASK_NAME
             ), 400);
         }
@@ -251,16 +251,16 @@ const BookingChatbot = () => {
             
             const voices = window.speechSynthesis.getVoices();
             
-            // Prioritize Masculine Portuguese voices
-            const mascNames = ['Daniel', 'Guilherme', 'Felipe', 'Ricardo', 'Google português do Brasil'];
+            // Prioritize High-Quality Masculine Portuguese voices
+            const mascNames = ['Google português do Brasil', 'Daniel', 'Guilherme', 'Felipe', 'Ricardo'];
             const ptVoice = voices.find(v => v.lang.includes('pt') && mascNames.some(name => v.name.includes(name))) ||
                             voices.find(v => v.lang.includes('pt-BR')) || 
                             voices.find(v => v.lang.startsWith('pt'));
 
             if (ptVoice) utterance.voice = ptVoice;
             utterance.lang = 'pt-BR';
-            utterance.rate = 1.2; // Faster pace
-            utterance.pitch = 0.95; // Slightly lower for more masculine tone
+            utterance.rate = 1.1; // Fast but natural
+            utterance.pitch = 1.0; // Natural pitch
 
             window.speechSynthesis.speak(utterance);
         }, delay);
@@ -331,7 +331,7 @@ const BookingChatbot = () => {
             userSay(val);
             setClientName(val);
             botSay(
-                `Anotado, <strong>${val}</strong>.<br/>Infome agora seu <strong>WhatsApp</strong> com DDD:`,
+                `Tudo bem, <strong>${val}</strong>.<br/>Agora me informe seu <strong>WhatsApp</strong> com DDD:`,
                 STEPS.ASK_PHONE
             );
             return;
@@ -340,13 +340,13 @@ const BookingChatbot = () => {
         if (step === STEPS.ASK_PHONE) {
             if (!validatePhone(val)) {
                 userSay(val);
-                botSay(`⚠️ Número inválido. Digite com o DDD.`);
+                botSay(`⚠️ O número parece incorreto. Digite com o DDD, por favor.`);
                 return;
             }
             userSay(val);
             setClientPhone(val);
             botSay(
-                `Certo. Agora escolha o <strong>serviço</strong>:`,
+                `Perfeito! Qual <strong>serviço</strong> vamos agendar hoje?`,
                 STEPS.ASK_SERVICE
             );
         }
@@ -357,7 +357,7 @@ const BookingChatbot = () => {
         userSay(`✂️ ${service.name}`);
         setSelectedService(service);
         botSay(
-            `Escolha o <strong>profissional</strong>:`,
+            `E com qual <strong>profissional</strong> você prefere ser atendido?`,
             STEPS.ASK_BARBER
         );
     };
@@ -367,7 +367,7 @@ const BookingChatbot = () => {
         userSay(`💈 ${barber.name}`);
         setSelectedBarber(barber);
         botSay(
-            `Escolha a <strong>data</strong> do atendimento:`,
+            `Pode escolher a <strong>data</strong> que fica melhor para você:`,
             STEPS.ASK_DATE
         );
     };
@@ -377,13 +377,13 @@ const BookingChatbot = () => {
         const dayInfo = getDayInfo(date);
         if (dayInfo?.closed) {
             setSelectedDate(date);
-            botSay(`🚫 Não atendemos aos domingos. Escolha outro dia.`);
+            botSay(`🚫 Não atendemos aos domingos. Pode escolher outro dia?`);
             return;
         }
         userSay(`📅 ${formatDate(date)}`);
         setSelectedDate(date);
         botSay(
-            `Agora selecione o <strong>horário</strong>:`,
+            `E qual o seu melhor <strong>horário</strong>?`,
             STEPS.ASK_TIME
         );
     };
@@ -399,7 +399,7 @@ const BookingChatbot = () => {
             ✂️ ${selectedService?.name}<br/>
             💈 ${selectedBarber?.name}<br/>
             📅 ${formatDate(selectedDate)} às ${time}<br/><br/>
-            <strong>Confirma o agendamento?</strong>
+            <strong>Podemos confirmar o seu agendamento?</strong>
         `;
         botSay(summary, STEPS.CONFIRM);
     };
@@ -471,7 +471,7 @@ const BookingChatbot = () => {
     // ── Cancel / restart ──────────────────────────────────────────────────
     const handleCancel = () => {
         userSay('❌ Cancelar');
-        botSay(`Agendamento cancelado.`, STEPS.DONE);
+        botSay(`Sem problemas. Se precisar de algo, é só chamar!`, STEPS.DONE);
     };
 
     const handleRestart = () => {
