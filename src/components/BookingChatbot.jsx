@@ -221,7 +221,7 @@ const BookingChatbot = () => {
     useEffect(() => {
         if (isOpen && messages.length === 0) {
             setTimeout(() => botSay(
-                `👋 Olá! Eu sou o assistente virtual da <strong>${siteData?.name || 'Barbearia'}</strong>.<br/><br/>Vou te ajudar a fazer seu agendamento em poucos passos! Qual é o seu <strong>nome completo</strong>?`,
+                `👋 Olá! Sou o assistente da <strong>${siteData?.name || 'Barbearia'}</strong>.<br/><br/>Informe seu <strong>nome completo</strong> para começarmos o agendamento:`,
                 STEPS.ASK_NAME
             ), 400);
         }
@@ -231,17 +231,17 @@ const BookingChatbot = () => {
     // ── Audio Engine ──────────────────────────────────────────────────────
     const stripHTML = (html) => {
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        return doc.body.textContent || "";
+        let text = doc.body.textContent || "";
+        // Remove common emojis and symbols to keep speech objective
+        return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
     };
 
     const speakText = (text, delay = 0) => {
         if (!isAudioEnabled || !window.speechSynthesis) return;
 
         setTimeout(() => {
-            // Cancel any pending speech
             window.speechSynthesis.cancel();
             
-            // Bug fix for Chrome: resume if stuck
             if (window.speechSynthesis.paused) {
                 window.speechSynthesis.resume();
             }
@@ -250,14 +250,17 @@ const BookingChatbot = () => {
             const utterance = new SpeechSynthesisUtterance(plainText);
             
             const voices = window.speechSynthesis.getVoices();
-            const ptVoice = voices.find(v => v.lang.includes('pt-BR')) || 
-                            voices.find(v => v.lang.includes('pt-PT')) || 
+            
+            // Prioritize Masculine Portuguese voices
+            const mascNames = ['Daniel', 'Guilherme', 'Felipe', 'Ricardo', 'Google português do Brasil'];
+            const ptVoice = voices.find(v => v.lang.includes('pt') && mascNames.some(name => v.name.includes(name))) ||
+                            voices.find(v => v.lang.includes('pt-BR')) || 
                             voices.find(v => v.lang.startsWith('pt'));
 
             if (ptVoice) utterance.voice = ptVoice;
             utterance.lang = 'pt-BR';
-            utterance.rate = 1.0;
-            utterance.pitch = 1.0;
+            utterance.rate = 1.2; // Faster pace
+            utterance.pitch = 0.95; // Slightly lower for more masculine tone
 
             window.speechSynthesis.speak(utterance);
         }, delay);
@@ -267,8 +270,7 @@ const BookingChatbot = () => {
         const nextState = !isAudioEnabled;
         setIsAudioEnabled(nextState);
         if (nextState) {
-            // Confirmation speech to unlock audio context
-            speakText("Olá! Voz do assistente ativada.", 100);
+            speakText("Voz ativada.", 100);
         } else {
             window.speechSynthesis.cancel();
         }
@@ -329,7 +331,7 @@ const BookingChatbot = () => {
             userSay(val);
             setClientName(val);
             botSay(
-                `Ótimo, <strong>${val}</strong>! 😊<br/>Agora me informe seu <strong>WhatsApp</strong> com DDD para confirmarmos o agendamento.`,
+                `Anotado, <strong>${val}</strong>.<br/>Infome agora seu <strong>WhatsApp</strong> com DDD:`,
                 STEPS.ASK_PHONE
             );
             return;
@@ -338,13 +340,13 @@ const BookingChatbot = () => {
         if (step === STEPS.ASK_PHONE) {
             if (!validatePhone(val)) {
                 userSay(val);
-                botSay(`⚠️ Parece que o número está incompleto. Digite com DDD, ex: <strong>(11) 99999-9999</strong>`);
+                botSay(`⚠️ Número inválido. Digite com o DDD.`);
                 return;
             }
             userSay(val);
             setClientPhone(val);
             botSay(
-                `Perfeito! ✅<br/>Agora escolha o <strong>serviço</strong> que deseja:`,
+                `Certo. Agora escolha o <strong>serviço</strong>:`,
                 STEPS.ASK_SERVICE
             );
         }
@@ -352,10 +354,10 @@ const BookingChatbot = () => {
 
     // ── Handle service selection ──────────────────────────────────────────
     const handleServiceSelect = (service) => {
-        userSay(`✂️ ${service.name} – R$ ${service.price}`);
+        userSay(`✂️ ${service.name}`);
         setSelectedService(service);
         botSay(
-            `Ótima escolha! 👍<br/>Agora selecione o <strong>profissional</strong> de sua preferência:`,
+            `Escolha o <strong>profissional</strong>:`,
             STEPS.ASK_BARBER
         );
     };
@@ -365,7 +367,7 @@ const BookingChatbot = () => {
         userSay(`💈 ${barber.name}`);
         setSelectedBarber(barber);
         botSay(
-            `Certo! Agendando com <strong>${barber.name}</strong>.<br/>Escolha a <strong>data</strong> desejada:`,
+            `Escolha a <strong>data</strong> do atendimento:`,
             STEPS.ASK_DATE
         );
     };
@@ -375,13 +377,13 @@ const BookingChatbot = () => {
         const dayInfo = getDayInfo(date);
         if (dayInfo?.closed) {
             setSelectedDate(date);
-            botSay(`🚫 Não atendemos aos <strong>domingos</strong>. Por favor, escolha outro dia!`);
+            botSay(`🚫 Não atendemos aos domingos. Escolha outro dia.`);
             return;
         }
         userSay(`📅 ${formatDate(date)}`);
         setSelectedDate(date);
         botSay(
-            `${formatDate(date)} – <strong>${dayInfo?.label}</strong>. Ótimo!<br/>Agora escolha o <strong>horário</strong>:`,
+            `Agora selecione o <strong>horário</strong>:`,
             STEPS.ASK_TIME
         );
     };
@@ -392,14 +394,12 @@ const BookingChatbot = () => {
         setSelectedTime(time);
 
         const summary = `
-            <strong>📋 Resumo do Agendamento:</strong><br/>
-            👤 <strong>Cliente:</strong> ${clientName}<br/>
-            📱 <strong>WhatsApp:</strong> ${clientPhone}<br/>
-            ✂️ <strong>Serviço:</strong> ${selectedService?.name} – R$ ${selectedService?.price}<br/>
-            💈 <strong>Profissional:</strong> ${selectedBarber?.name}<br/>
-            📅 <strong>Data:</strong> ${formatDate(selectedDate)}<br/>
-            ⏰ <strong>Horário:</strong> ${time}<br/><br/>
-            Deseja <strong>confirmar</strong> o agendamento? 🎉
+            👤 ${clientName}<br/>
+            📱 ${clientPhone}<br/>
+            ✂️ ${selectedService?.name}<br/>
+            💈 ${selectedBarber?.name}<br/>
+            📅 ${formatDate(selectedDate)} às ${time}<br/><br/>
+            <strong>Confirma o agendamento?</strong>
         `;
         botSay(summary, STEPS.CONFIRM);
     };
@@ -471,7 +471,7 @@ const BookingChatbot = () => {
     // ── Cancel / restart ──────────────────────────────────────────────────
     const handleCancel = () => {
         userSay('❌ Cancelar');
-        botSay(`Sem problema! Se quiser agendar depois é só chamar. 😊`, STEPS.DONE);
+        botSay(`Agendamento cancelado.`, STEPS.DONE);
     };
 
     const handleRestart = () => {
