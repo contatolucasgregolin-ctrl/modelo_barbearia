@@ -29,6 +29,24 @@ const SendIcon = () => (
     </svg>
 );
 
+const SpeakerIcon = ({ muted }) => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: muted ? 0.5 : 1 }}>
+        {muted ? (
+            <>
+                <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+            </>
+        ) : (
+            <>
+                <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            </>
+        )}
+    </svg>
+);
+
 const ScissorsIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
@@ -104,6 +122,7 @@ const BookingChatbot = () => {
     const [inputValue, setInputValue] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const [showBadge, setShowBadge] = useState(true);
+    const [isAudioEnabled, setIsAudioEnabled] = useState(false);
 
     // Booking data
     const [clientName, setClientName]   = useState('');
@@ -186,12 +205,42 @@ const BookingChatbot = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
+    // ── Audio Engine ──────────────────────────────────────────────────────
+    const stripHTML = (html) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        return doc.body.textContent || "";
+    };
+
+    const speakText = (text) => {
+        if (!isAudioEnabled || !window.speechSynthesis) return;
+
+        // Cancel any pending speech
+        window.speechSynthesis.cancel();
+
+        const plainText = stripHTML(text);
+        const utterance = new SpeechSynthesisUtterance(plainText);
+        
+        // Find best Portuguese voice
+        const voices = window.speechSynthesis.getVoices();
+        const ptVoice = voices.find(v => v.lang.includes('pt-BR')) || 
+                        voices.find(v => v.lang.includes('pt-PT')) || 
+                        voices.find(v => v.lang.startsWith('pt'));
+
+        if (ptVoice) utterance.voice = ptVoice;
+        utterance.lang = 'pt-BR';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+
+        window.speechSynthesis.speak(utterance);
+    };
+
     // ── Bot message helper ────────────────────────────────────────────────
     const botSay = (text, nextStep = null) => {
         setIsTyping(true);
         setTimeout(() => {
             setIsTyping(false);
             setMessages(prev => [...prev, { from: 'bot', text }]);
+            speakText(text); // Trigger audio
             if (nextStep) setStep(nextStep);
         }, 900);
     };
@@ -424,6 +473,9 @@ const BookingChatbot = () => {
                             Online agora
                         </span>
                     </div>
+                    <button className="chatbot-header-audio" onClick={() => setIsAudioEnabled(!isAudioEnabled)} aria-label={isAudioEnabled ? "Mutar voz" : "Ativar voz"}>
+                        <SpeakerIcon muted={!isAudioEnabled} />
+                    </button>
                     <button className="chatbot-header-close" onClick={() => setIsOpen(false)} aria-label="Fechar chat">
                         <CloseIcon />
                     </button>

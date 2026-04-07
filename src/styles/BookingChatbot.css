@@ -153,23 +153,27 @@
     50%       { opacity: 0.3; }
 }
 
-.chatbot-header-close {
+.chatbot-header-close, .chatbot-header-audio {
     background: rgba(255,255,255,0.06);
     border: none;
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #999;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s;
+    transition: all 0.2s ease;
 }
 
-.chatbot-header-close:hover {
+.chatbot-header-close:hover, .chatbot-header-audio:hover {
     background: rgba(255,255,255,0.12);
     color: #fff;
+}
+
+.chatbot-header-audio:active {
+    transform: scale(0.92);
 }
 
 /* ─── PROGRESS BAR ────────────────────────────────────────────── */
