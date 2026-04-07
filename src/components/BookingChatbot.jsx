@@ -67,8 +67,11 @@ const ScissorsIcon = () => (
 // ─── FLOW STEPS ──────────────────────────────────────────────────────────────
 const STEPS = {
     GREETING: 'greeting',
+    INTENT_SELECTION: 'intent_selection',
     ASK_NAME: 'ask_name',
     ASK_PHONE: 'ask_phone',
+    ASK_PHONE_PLAN: 'ask_phone_plan',
+    ASK_PHONE_PROMO: 'ask_phone_promo',
     ASK_SERVICE: 'ask_service',
     ASK_BARBER: 'ask_barber',
     ASK_DATE: 'ask_date',
@@ -150,6 +153,16 @@ const BookingChatbot = () => {
 
     const messagesEndRef = useRef(null);
     const inputRef       = useRef(null);
+    const utteranceRef   = useRef(null); // Fix Chrome GC Voice bug
+    
+    // Stable refs for STT loop 
+    const stepRef = useRef(step);
+    const isVoiceModeRef = useRef(isVoiceMode);
+    const isOpenRef = useRef(isOpen);
+    
+    useEffect(() => { stepRef.current = step; }, [step]);
+    useEffect(() => { isVoiceModeRef.current = isVoiceMode; }, [isVoiceMode]);
+    useEffect(() => { isOpenRef.current = isOpen; }, [isOpen]);
 
     // ── Fetch services & barbers from Context or DB ─────────────────────────
     useEffect(() => {
@@ -222,8 +235,8 @@ const BookingChatbot = () => {
     useEffect(() => {
         if (isOpen && messages.length === 0) {
             setTimeout(() => botSay(
-                `👋 Olá! Seja muito bem-vindo à <strong>${siteData?.name || 'nossa barbearia'}</strong>.<br/><br/>Para começarmos o seu agendamento, como eu posso te chamar?`,
-                STEPS.ASK_NAME
+                `👋 Olá! Sou o assistente virtual da Barbearia.<br/><br/>Posso te ajudar com <strong>Agendamentos</strong>, conferir <strong>Promoções</strong>, ou explicar nossos <strong>Planos de Assinatura</strong>. O que você deseja fazer hoje?`,
+                STEPS.INTENT_SELECTION
             ), 400);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -249,6 +262,7 @@ const BookingChatbot = () => {
 
             const plainText = stripHTML(text);
             const utterance = new SpeechSynthesisUtterance(plainText);
+            utteranceRef.current = utterance; // Prevent Garage Collection hook silence
             
             const voices = window.speechSynthesis.getVoices();
             
@@ -264,8 +278,8 @@ const BookingChatbot = () => {
 
             // Hands-free loop: trigger mic after bot finishes speaking
             utterance.onend = () => {
-                if (isVoiceMode && isOpen) {
-                    setTimeout(() => startListening(), 300);
+                if (isVoiceModeRef.current && isOpenRef.current) {
+                    setTimeout(() => startListening(), 400);
                 }
             };
 
@@ -307,11 +321,10 @@ const BookingChatbot = () => {
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
             setInputValue(transcript);
-            // Auto-submit after voice input
+            // Auto-submit tightly coupled to the exact step we were on when speaking!
             setTimeout(() => {
-                const sendBtn = document.querySelector('.chatbot-send-btn');
-                if (sendBtn && !sendBtn.disabled) sendBtn.click();
-            }, 500);
+                handleTextSubmit(transcript);
+            }, 300);
         };
 
         recognition.start();
@@ -324,7 +337,10 @@ const BookingChatbot = () => {
             setIsTyping(false);
             setMessages(prev => [...prev, { from: 'bot', text }]);
             speakText(text); // Trigger audio
-            if (nextStep) setStep(nextStep);
+            if (nextStep) {
+                setStep(nextStep);
+                stepRef.current = nextStep; // synchronous update
+            }
         }, 900);
     };
 
@@ -333,12 +349,33 @@ const BookingChatbot = () => {
     };
 
     // ── Handle text input submission ──────────────────────────────────────
-    const handleTextSubmit = () => {
-        const val = inputValue.trim();
+    const handleTextSubmit = (overrideVal = null) => {
+        const rawVal = typeof overrideVal === 'string' ? overrideVal : inputValue;
+        const val = rawVal.trim();
         if (!val) return;
-        setInputValue('');
+        if (typeof overrideVal !== 'string') setInputValue('');
 
-        if (step === STEPS.ASK_NAME) {
+        const currentStep = stepRef.current; // GUARANTEED LATEST STATE
+
+        if (currentStep === STEPS.INTENT_SELECTION) {
+            userSay(val);
+            const lower = val.toLowerCase();
+            if (lower.includes('agendar') || lower.includes('marcar') || lower.includes('corte') || lower.includes('horário') || lower.includes('agendamento')) {
+                botSay(`Ótimo! Vamos marcar o seu horário. Para começarmos sua reserva, como eu posso te chamar?`, STEPS.ASK_NAME);
+            } 
+            else if (lower.includes('plano') || lower.includes('assinatura') || lower.includes('clube') || lower.includes('mensal')) {
+                botSay(`Legal! Nossos planos de assinatura oferecem cortes ilimitados. Qual o seu WhatsApp com o DDD para um especialista te chamar?`, STEPS.ASK_PHONE_PLAN);
+            }
+            else if (lower.includes('promo') || lower.includes('desconto') || lower.includes('oferta') || lower.includes('cupom')) {
+                 botSay(`Temos várias ofertas exclusivas acontecendo! Me diga o seu WhatsApp com o DDD para eu te enviar a lista VIP de benefícios?`, STEPS.ASK_PHONE_PROMO);
+            }
+            else {
+                botSay(`Desculpe, não entendi bem. Você gostaria de fazer um Agendamento, conferir Promoções ou saber dos Planos?`, STEPS.INTENT_SELECTION);
+            }
+            return;
+        }
+
+        if (currentStep === STEPS.ASK_NAME) {
             userSay(val);
             setClientName(val);
             botSay(
@@ -348,10 +385,10 @@ const BookingChatbot = () => {
             return;
         }
 
-        if (step === STEPS.ASK_PHONE) {
+        if (currentStep === STEPS.ASK_PHONE) {
             if (!validatePhone(val)) {
                 userSay(val);
-                botSay(`Hmm, esse número parece estar faltando algum dígito. Pode me mandar com o DDD, por favor?`);
+                botSay(`Hmm, esse número parece estar muito curto. Pode me dizer com o DDD de novo, por favor?`);
                 return;
             }
             userSay(val);
@@ -360,6 +397,25 @@ const BookingChatbot = () => {
                 `Perfeito! Agora, qual desses <strong>serviços</strong> você gostaria de agendar hoje?`,
                 STEPS.ASK_SERVICE
             );
+            return;
+        }
+
+        if (currentStep === STEPS.ASK_PHONE_PLAN || currentStep === STEPS.ASK_PHONE_PROMO) {
+            if (!validatePhone(val)) {
+                userSay(val);
+                botSay(`Esse número me pareceu incompleto. Me diga seu WhatsApp com o DDD e o número completo, por favor?`);
+                return;
+            }
+            userSay(val);
+            setClientPhone(val);
+            const topic = currentStep === STEPS.ASK_PHONE_PLAN ? "Planos" : "Promoções";
+            botSay(`Fechado! O time já foi avisado. Em breve, enviaremos todas as novidades sobre ${topic} diretor no seu celular!`, STEPS.DONE);
+            
+            // Redirect to whatsapp
+            const phone = (siteData?.contact?.whatsapp || '').replace(/\D/g, '');
+            let msg = `Olá, estava usando o Assistente Virtual e gostaria de saber os detalhes comerciais sobre *${topic}*!`;
+            if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+            return;
         }
     };
 
@@ -499,8 +555,8 @@ const BookingChatbot = () => {
         setIsVoiceMode(false);
         // Trigger greeting again
         setTimeout(() => botSay(
-            `👋 Olá novamente! Como eu posso te chamar desta vez?`,
-            STEPS.ASK_NAME
+            `👋 Olá novamente! Posso te ajudar com Agendamentos, Promoções, ou com Planos de Assinatura. O que deseja?`,
+            STEPS.INTENT_SELECTION
         ), 500);
     };
 
@@ -564,32 +620,34 @@ const BookingChatbot = () => {
                     </button>
                 </div>
 
-                {/* Progress steps indicator */}
-                <div className="chatbot-progress">
-                    {[
-                        { key: STEPS.ASK_NAME, label: 'Dados' },
-                        { key: STEPS.ASK_SERVICE, label: 'Serviço' },
-                        { key: STEPS.ASK_BARBER, label: 'Profissional' },
-                        { key: STEPS.ASK_DATE, label: 'Data' },
-                        { key: STEPS.ASK_TIME, label: 'Horário' },
-                        { key: STEPS.CONFIRM, label: 'Confirmar' },
-                    ].map((s, i, arr) => {
-                        const order = Object.values(STEPS);
-                        const currentIdx = order.indexOf(step);
-                        const stepIdx = order.indexOf(s.key);
-                        const isDone = currentIdx > stepIdx;
-                        const isActive = currentIdx === stepIdx;
-                        return (
-                            <div key={s.key} className="chatbot-prog-item">
-                                <div className={`chatbot-prog-dot ${isDone ? 'done' : isActive ? 'active' : ''}`}>
-                                    {isDone ? '✓' : i + 1}
+                {/* Progress steps indicator - Only relevant for booking flow */}
+                {[STEPS.ASK_NAME, STEPS.ASK_SERVICE, STEPS.ASK_BARBER, STEPS.ASK_DATE, STEPS.ASK_TIME, STEPS.CONFIRM].includes(step) && (
+                    <div className="chatbot-progress">
+                        {[
+                            { key: STEPS.ASK_NAME, label: 'Dados' },
+                            { key: STEPS.ASK_SERVICE, label: 'Serviço' },
+                            { key: STEPS.ASK_BARBER, label: 'Profissional' },
+                            { key: STEPS.ASK_DATE, label: 'Data' },
+                            { key: STEPS.ASK_TIME, label: 'Horário' },
+                            { key: STEPS.CONFIRM, label: 'Confirmar' },
+                        ].map((s, i, arr) => {
+                            const order = Object.values(STEPS);
+                            const currentIdx = order.indexOf(step);
+                            const stepIdx = order.indexOf(s.key);
+                            const isDone = currentIdx > stepIdx;
+                            const isActive = currentIdx === stepIdx;
+                            return (
+                                <div key={s.key} className="chatbot-prog-item">
+                                    <div className={`chatbot-prog-dot ${isDone ? 'done' : isActive ? 'active' : ''}`}>
+                                        {isDone ? '✓' : i + 1}
+                                    </div>
+                                    <span className={`chatbot-prog-label ${isActive ? 'active' : ''}`}>{s.label}</span>
+                                    {i < arr.length - 1 && <div className={`chatbot-prog-line ${isDone ? 'done' : ''}`} />}
                                 </div>
-                                <span className={`chatbot-prog-label ${isActive ? 'active' : ''}`}>{s.label}</span>
-                                {i < arr.length - 1 && <div className={`chatbot-prog-line ${isDone ? 'done' : ''}`} />}
-                            </div>
-                        );
-                    })}
-                </div>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Messages area */}
                 <div className="chatbot-messages" id="chatbot-messages-container">
@@ -709,14 +767,16 @@ const BookingChatbot = () => {
                 </div>
 
                 {/* Input area (only for text steps) */}
-                {(step === STEPS.ASK_NAME || step === STEPS.ASK_PHONE) && !isTyping && (
-                    <div className={`chatbot-input-area ${isVoiceMode ? 'voice-active' : ''}`}>
+                {([STEPS.INTENT_SELECTION, STEPS.ASK_NAME, STEPS.ASK_PHONE, STEPS.ASK_PHONE_PLAN, STEPS.ASK_PHONE_PROMO].includes(step)) && !isTyping && (
+                    <div className={`chatbot-input-area ${isVoiceModeRef.current ? 'voice-active' : ''}`}>
                         <input
                             ref={inputRef}
-                            type={step === STEPS.ASK_PHONE ? 'tel' : 'text'}
+                            type={step.includes('phone') ? 'tel' : 'text'}
                             className="chatbot-input"
                             placeholder={
-                                step === STEPS.ASK_NAME
+                                step === STEPS.INTENT_SELECTION 
+                                    ? 'Diga ou digite o que você precisa...'
+                                    : step === STEPS.ASK_NAME
                                     ? 'Digite seu nome completo...'
                                     : 'Ex: (11) 99999-9999'
                             }

@@ -431,18 +431,18 @@ const Admin = () => {
 
             {/* ── Central Pop-up Alert ── */}
             {activeAlert && (
-                <div className="admin-notification-overlay fade-in">
-                    <div className="admin-notification-popup bounce-in">
-                        <div className="notification-icon-large">
-                            {activeAlert.type === 'subscription' ? <Star size={40} /> :
-                                activeAlert.type === 'promo_interest' ? <Megaphone size={40} /> :
-                                    <Bell size={40} />}
+                <div className="admin-central-alert-overlay fade-in">
+                    <div className="admin-central-alert bounce-in">
+                        <div className="alert-icon-main">
+                            {activeAlert.type === 'subscription' ? <Star size={48} color="var(--color-primary)" /> :
+                                activeAlert.type === 'promo_interest' ? <Megaphone size={48} color="var(--color-primary)" /> :
+                                    <Bell size={48} color="var(--color-primary)" />}
                         </div>
-                        <h3 className="notification-title">{activeAlert.title}</h3>
-                        <p className="notification-message">{activeAlert.message}</p>
-                        <div className="notification-actions">
+                        <h3>{activeAlert.title}</h3>
+                        <p>{activeAlert.message}</p>
+                        <div className="alert-actions">
                             <button className="admin-btn-secondary" onClick={() => setActiveAlert(null)}>Fechar</button>
-                            <button className="admin-btn-primary neon-glow" onClick={() => {
+                            <button className="admin-btn-primary" onClick={() => {
                                 handleNotificationClick(activeAlert);
                                 setActiveAlert(null);
                             }}>Ver Agora</button>
