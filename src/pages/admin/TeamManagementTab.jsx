@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { 
     Users, Plus, Pencil, Trash2, Shield, Key, 
     Check, X, Save, RefreshCw, Star, Mail, Phone,
-    UserPlus, UserCheck, ShieldCheck, ShieldAlert
+    UserPlus, UserCheck, ShieldCheck, ShieldAlert, MessageCircle
 } from 'lucide-react';
 import { supabase, uploadStorageFile, compressToWebP } from '../../lib/supabase';
 import { myConfirm, myAlert } from '../../lib/utils';
@@ -231,6 +231,18 @@ const TeamManagementTab = ({ isAdmin, cachedData, refreshAll }) => {
 
                                                     <div className="prof-card-actions">
                                                         <button className="action-btn edit" onClick={() => openEdit(prof)}><Pencil size={16} /> Editar</button>
+                                                        {prof.phone && (
+                                                            <button 
+                                                                className="action-btn whatsapp" 
+                                                                onClick={() => {
+                                                                    const cleanStr = (prof.phone || '').replace(/\D/g, '');
+                                                                    window.open(`https://wa.me/55${cleanStr}`, '_blank');
+                                                                }}
+                                                                title="Conversar no WhatsApp"
+                                                            >
+                                                                <MessageCircle size={16} />
+                                                            </button>
+                                                        )}
                                                         <button className="action-btn delete" onClick={() => removeProf(prof.id)}><Trash2 size={16} /></button>
                                                     </div>
                                                 </div>
@@ -497,6 +509,7 @@ const TeamManagementTab = ({ isAdmin, cachedData, refreshAll }) => {
                     transition: all 0.2s;
                 }
                 .prof-card-actions .action-btn.edit:hover { background: var(--color-primary); color: #000; }
+                .prof-card-actions .action-btn.whatsapp:hover { background: #25d366; color: #fff; border-color: #25d366; }
                 .prof-card-actions .action-btn.delete:hover { background: #ef4444; color: #fff; }
                 
                 .badge-role {

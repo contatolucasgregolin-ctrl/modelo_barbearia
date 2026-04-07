@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { myConfirm } from '../../lib/utils';
 import { StatusBadge, Modal } from '../Admin';
 import {
-    Plus, Trash2, Save, Pencil, X, CalendarDays, RefreshCw
+    Plus, Trash2, Save, Pencil, X, CalendarDays, RefreshCw, MessageCircle
 } from 'lucide-react';
 import MiniTutorial from '../../components/MiniTutorial';
 import Swal from 'sweetalert2';
@@ -188,6 +188,19 @@ const CustomersTab = ({ cachedData, refreshAll }) => {
                                     <td data-label="Ações">
                                         <div className="table-actions">
                                             <button className="action-btn" title="Ver Histórico" onClick={() => viewHistory(c)} style={{ color: 'var(--color-primary)' }}><CalendarDays size={16} /></button>
+                                            {c.phone && (
+                                                <button 
+                                                    className="action-btn" 
+                                                    title="Conversar no WhatsApp" 
+                                                    onClick={() => {
+                                                        const cleanStr = (c.phone || '').replace(/\D/g, '');
+                                                        window.open(`https://wa.me/55${cleanStr}`, '_blank');
+                                                    }}
+                                                    style={{ color: '#25d366' }}
+                                                >
+                                                    <MessageCircle size={16} />
+                                                </button>
+                                            )}
                                             <button className="action-btn edit" onClick={() => openEdit(c)}><Pencil size={16} /></button>
                                             <button className="action-btn delete" onClick={() => remove(c.id)}><Trash2 size={16} /></button>
                                         </div>

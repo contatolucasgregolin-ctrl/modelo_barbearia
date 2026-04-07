@@ -120,16 +120,37 @@ const BookingChatbot = () => {
     const messagesEndRef = useRef(null);
     const inputRef       = useRef(null);
 
-    // ── Fetch services & barbers on mount ───────────────────────────────────
+    // ── Fetch services & barbers from Context or DB ─────────────────────────
     useEffect(() => {
-        const load = async () => {
+        if (siteData?.services?.length > 0) {
+            setServices(siteData.services.map(s => ({
+                id: s.id,
+                name: s.name,
+                price: s.price,
+                duration_mins: parseInt(s.duration) || 0
+            })));
+        }
+        if (siteData?.barbers?.length > 0) {
+            setBarbers(siteData.barbers.map(b => ({
+                id: b.id,
+                name: b.name,
+                photo_url: b.photo,
+                specialty: b.specialty
+            })));
+        }
+    }, [siteData]);
+
+    // Fallback load if context is empty
+    useEffect(() => {
+        const loadFallback = async () => {
+            if (services.length > 0) return;
             const { data: sData } = await supabase.from('services').select('*').order('name');
             if (sData) setServices(sData);
             const { data: aData } = await supabase.from('artists').select('*').eq('active', true).order('name');
             if (aData) setBarbers(aData);
         };
-        load();
-    }, []);
+        loadFallback();
+    }, [services.length]);
 
     // ── Fetch booked times when date + barber change ─────────────────────────
     useEffect(() => {
