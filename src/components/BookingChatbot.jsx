@@ -133,6 +133,7 @@ const BookingChatbot = () => {
     const [showBadge, setShowBadge] = useState(true);
     const [isAudioEnabled, setIsAudioEnabled] = useState(false);
     const [isListening, setIsListening] = useState(false);
+    const [isVoiceMode, setIsVoiceMode] = useState(false);
     const [voicesLoaded, setVoicesLoaded] = useState(false);
 
     // Booking data
@@ -221,7 +222,7 @@ const BookingChatbot = () => {
     useEffect(() => {
         if (isOpen && messages.length === 0) {
             setTimeout(() => botSay(
-                `👋 Olá! Sou o assistente da <strong>${siteData?.name || 'Barbearia'}</strong>.<br/><br/>Qual o seu <strong>nome completo</strong> para começarmos?`,
+                `👋 Olá! Seja muito bem-vindo à <strong>${siteData?.name || 'nossa barbearia'}</strong>.<br/><br/>Para começarmos o seu agendamento, como eu posso te chamar?`,
                 STEPS.ASK_NAME
             ), 400);
         }
@@ -251,7 +252,6 @@ const BookingChatbot = () => {
             
             const voices = window.speechSynthesis.getVoices();
             
-            // Prioritize High-Quality Masculine Portuguese voices
             const mascNames = ['Google português do Brasil', 'Daniel', 'Guilherme', 'Felipe', 'Ricardo'];
             const ptVoice = voices.find(v => v.lang.includes('pt') && mascNames.some(name => v.name.includes(name))) ||
                             voices.find(v => v.lang.includes('pt-BR')) || 
@@ -259,8 +259,15 @@ const BookingChatbot = () => {
 
             if (ptVoice) utterance.voice = ptVoice;
             utterance.lang = 'pt-BR';
-            utterance.rate = 1.1; // Fast but natural
-            utterance.pitch = 1.0; // Natural pitch
+            utterance.rate = 0.95; // Fluid, natural pace
+            utterance.pitch = 1.0; 
+
+            // Hands-free loop: trigger mic after bot finishes speaking
+            utterance.onend = () => {
+                if (isVoiceMode && isOpen) {
+                    setTimeout(() => startListening(), 300);
+                }
+            };
 
             window.speechSynthesis.speak(utterance);
         }, delay);
@@ -270,7 +277,7 @@ const BookingChatbot = () => {
         const nextState = !isAudioEnabled;
         setIsAudioEnabled(nextState);
         if (nextState) {
-            speakText("Voz ativada.", 100);
+            speakText("Modo de voz ativado.", 100);
         } else {
             window.speechSynthesis.cancel();
         }
@@ -283,6 +290,10 @@ const BookingChatbot = () => {
             alert("Seu navegador não suporta reconhecimento de voz.");
             return;
         }
+
+        // Set voice mode to true for hands-free loop
+        setIsVoiceMode(true);
+        if (!isAudioEnabled) setIsAudioEnabled(true);
 
         const recognition = new SpeechRecognition();
         recognition.lang = 'pt-BR';
@@ -331,7 +342,7 @@ const BookingChatbot = () => {
             userSay(val);
             setClientName(val);
             botSay(
-                `Tudo bem, <strong>${val}</strong>.<br/>Agora me informe seu <strong>WhatsApp</strong> com DDD:`,
+                `Muito prazer, <strong>${val}</strong>!<br/>Para continuarmos, você poderia me informar seu <strong>WhatsApp</strong> com o DDD?`,
                 STEPS.ASK_PHONE
             );
             return;
@@ -340,13 +351,13 @@ const BookingChatbot = () => {
         if (step === STEPS.ASK_PHONE) {
             if (!validatePhone(val)) {
                 userSay(val);
-                botSay(`⚠️ O número parece incorreto. Digite com o DDD, por favor.`);
+                botSay(`Hmm, esse número parece estar faltando algum dígito. Pode me mandar com o DDD, por favor?`);
                 return;
             }
             userSay(val);
             setClientPhone(val);
             botSay(
-                `Perfeito! Qual <strong>serviço</strong> vamos agendar hoje?`,
+                `Perfeito! Agora, qual desses <strong>serviços</strong> você gostaria de agendar hoje?`,
                 STEPS.ASK_SERVICE
             );
         }
@@ -357,7 +368,7 @@ const BookingChatbot = () => {
         userSay(`✂️ ${service.name}`);
         setSelectedService(service);
         botSay(
-            `E com qual <strong>profissional</strong> você prefere ser atendido?`,
+            `Ótima escolha! E com qual de nossos <strong>profissionais</strong> você prefere ser atendido?`,
             STEPS.ASK_BARBER
         );
     };
@@ -367,7 +378,7 @@ const BookingChatbot = () => {
         userSay(`💈 ${barber.name}`);
         setSelectedBarber(barber);
         botSay(
-            `Pode escolher a <strong>data</strong> que fica melhor para você:`,
+            `Certo! Agora pode escolher a <strong>data</strong> que fica melhor para o seu atendimento:`,
             STEPS.ASK_DATE
         );
     };
@@ -377,13 +388,13 @@ const BookingChatbot = () => {
         const dayInfo = getDayInfo(date);
         if (dayInfo?.closed) {
             setSelectedDate(date);
-            botSay(`🚫 Não atendemos aos domingos. Pode escolher outro dia?`);
+            botSay(`Olha, infelizmente não atendemos aos domingos. Você teria outro dia de preferência?`);
             return;
         }
         userSay(`📅 ${formatDate(date)}`);
         setSelectedDate(date);
         botSay(
-            `E qual o seu melhor <strong>horário</strong>?`,
+            `Data anotada! E qual seria o melhor <strong>horário</strong> para você?`,
             STEPS.ASK_TIME
         );
     };
@@ -399,7 +410,7 @@ const BookingChatbot = () => {
             ✂️ ${selectedService?.name}<br/>
             💈 ${selectedBarber?.name}<br/>
             📅 ${formatDate(selectedDate)} às ${time}<br/><br/>
-            <strong>Podemos confirmar o seu agendamento?</strong>
+            <strong>Tudo certo! Podemos confirmar o seu agendamento agora?</strong>
         `;
         botSay(summary, STEPS.CONFIRM);
     };
@@ -471,7 +482,8 @@ const BookingChatbot = () => {
     // ── Cancel / restart ──────────────────────────────────────────────────
     const handleCancel = () => {
         userSay('❌ Cancelar');
-        botSay(`Sem problemas. Se precisar de algo, é só chamar!`, STEPS.DONE);
+        setIsVoiceMode(false);
+        botSay(`Sem problemas. Se mudar de ideia ou precisar de outra coisa, é só me chamar!`, STEPS.DONE);
     };
 
     const handleRestart = () => {
@@ -484,9 +496,10 @@ const BookingChatbot = () => {
         setSelectedDate('');
         setSelectedTime('');
         setBookedTimes([]);
+        setIsVoiceMode(false);
         // Trigger greeting again
         setTimeout(() => botSay(
-            `👋 Olá de novo! Qual é o seu <strong>nome completo</strong>?`,
+            `👋 Olá novamente! Como eu posso te chamar desta vez?`,
             STEPS.ASK_NAME
         ), 500);
     };
@@ -697,7 +710,7 @@ const BookingChatbot = () => {
 
                 {/* Input area (only for text steps) */}
                 {(step === STEPS.ASK_NAME || step === STEPS.ASK_PHONE) && !isTyping && (
-                    <div className="chatbot-input-area">
+                    <div className={`chatbot-input-area ${isVoiceMode ? 'voice-active' : ''}`}>
                         <input
                             ref={inputRef}
                             type={step === STEPS.ASK_PHONE ? 'tel' : 'text'}
