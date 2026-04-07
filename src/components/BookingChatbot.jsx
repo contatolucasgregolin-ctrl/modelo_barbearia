@@ -47,6 +47,15 @@ const SpeakerIcon = ({ muted }) => (
     </svg>
 );
 
+const MicIcon = ({ listening }) => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill={listening ? "var(--color-primary)" : "none"} stroke="currentColor" strokeWidth="2" className={listening ? "pulse-icon" : ""}>
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+        <line x1="12" y1="19" x2="12" y2="23" />
+        <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+);
+
 const ScissorsIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
@@ -123,6 +132,8 @@ const BookingChatbot = () => {
     const [isTyping, setIsTyping] = useState(false);
     const [showBadge, setShowBadge] = useState(true);
     const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+    const [isListening, setIsListening] = useState(false);
+    const [voicesLoaded, setVoicesLoaded] = useState(false);
 
     // Booking data
     const [clientName, setClientName]   = useState('');
@@ -171,6 +182,18 @@ const BookingChatbot = () => {
         loadFallback();
     }, [services.length]);
 
+    // ── Voice Initialization ──────────────────────────────────────────────
+    useEffect(() => {
+        const loadVoices = () => {
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) setVoicesLoaded(true);
+        };
+        loadVoices();
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+    }, []);
+
     // ── Fetch booked times when date + barber change ─────────────────────────
     useEffect(() => {
         const fetch = async () => {
@@ -211,27 +234,74 @@ const BookingChatbot = () => {
         return doc.body.textContent || "";
     };
 
-    const speakText = (text) => {
+    const speakText = (text, delay = 0) => {
         if (!isAudioEnabled || !window.speechSynthesis) return;
 
-        // Cancel any pending speech
-        window.speechSynthesis.cancel();
+        setTimeout(() => {
+            // Cancel any pending speech
+            window.speechSynthesis.cancel();
+            
+            // Bug fix for Chrome: resume if stuck
+            if (window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+            }
 
-        const plainText = stripHTML(text);
-        const utterance = new SpeechSynthesisUtterance(plainText);
-        
-        // Find best Portuguese voice
-        const voices = window.speechSynthesis.getVoices();
-        const ptVoice = voices.find(v => v.lang.includes('pt-BR')) || 
-                        voices.find(v => v.lang.includes('pt-PT')) || 
-                        voices.find(v => v.lang.startsWith('pt'));
+            const plainText = stripHTML(text);
+            const utterance = new SpeechSynthesisUtterance(plainText);
+            
+            const voices = window.speechSynthesis.getVoices();
+            const ptVoice = voices.find(v => v.lang.includes('pt-BR')) || 
+                            voices.find(v => v.lang.includes('pt-PT')) || 
+                            voices.find(v => v.lang.startsWith('pt'));
 
-        if (ptVoice) utterance.voice = ptVoice;
-        utterance.lang = 'pt-BR';
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
+            if (ptVoice) utterance.voice = ptVoice;
+            utterance.lang = 'pt-BR';
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
 
-        window.speechSynthesis.speak(utterance);
+            window.speechSynthesis.speak(utterance);
+        }, delay);
+    };
+
+    const handleAudioToggle = () => {
+        const nextState = !isAudioEnabled;
+        setIsAudioEnabled(nextState);
+        if (nextState) {
+            // Confirmation speech to unlock audio context
+            speakText("Olá! Voz do assistente ativada.", 100);
+        } else {
+            window.speechSynthesis.cancel();
+        }
+    };
+
+    // ── Speech Recognition (STT) ──────────────────────────────────────────
+    const startListening = () => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert("Seu navegador não suporta reconhecimento de voz.");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'pt-BR';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = () => setIsListening(true);
+        recognition.onend = () => setIsListening(false);
+        recognition.onerror = () => setIsListening(false);
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            setInputValue(transcript);
+            // Auto-submit after voice input
+            setTimeout(() => {
+                const sendBtn = document.querySelector('.chatbot-send-btn');
+                if (sendBtn && !sendBtn.disabled) sendBtn.click();
+            }, 500);
+        };
+
+        recognition.start();
     };
 
     // ── Bot message helper ────────────────────────────────────────────────
@@ -473,7 +543,7 @@ const BookingChatbot = () => {
                             Online agora
                         </span>
                     </div>
-                    <button className="chatbot-header-audio" onClick={() => setIsAudioEnabled(!isAudioEnabled)} aria-label={isAudioEnabled ? "Mutar voz" : "Ativar voz"}>
+                    <button className="chatbot-header-audio" onClick={handleAudioToggle} aria-label={isAudioEnabled ? "Mutar voz" : "Ativar voz"}>
                         <SpeakerIcon muted={!isAudioEnabled} />
                     </button>
                     <button className="chatbot-header-close" onClick={() => setIsOpen(false)} aria-label="Fechar chat">
@@ -643,6 +713,14 @@ const BookingChatbot = () => {
                             autoComplete="off"
                             maxLength={step === STEPS.ASK_PHONE ? 20 : 60}
                         />
+                        <button
+                            className={`chatbot-mic-btn ${isListening ? 'active' : ''}`}
+                            onClick={startListening}
+                            title="Falar por voz"
+                            type="button"
+                        >
+                            <MicIcon listening={isListening} />
+                        </button>
                         <button
                             className="chatbot-send-btn"
                             onClick={handleTextSubmit}
