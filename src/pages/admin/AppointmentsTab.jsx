@@ -567,21 +567,21 @@ const AppointmentsTab = ({ appointments: allAppointments, loading: globalLoading
                                 ✏️ Use esta função para registrar um agendamento de um cliente que entrou em contato por telefone, presencialmente ou pelo WhatsApp.
                             </p>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                                     <label>Nome do Cliente *</label>
                                     <input className="form-input" value={newApptForm.customer_name}
                                         onChange={e => setNewApptForm(f => ({ ...f, customer_name: e.target.value }))}
                                         placeholder="Ex: João Silva" />
                                 </div>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                                     <label>Telefone / WhatsApp</label>
                                     <input className="form-input" value={newApptForm.customer_phone}
                                         onChange={e => setNewApptForm(f => ({ ...f, customer_phone: e.target.value }))}
                                         placeholder="(31) 99999-9999" />
                                     <small style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Se o número já estiver no sistema, o cliente será vinculado automaticamente.</small>
                                 </div>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                                     <label>Serviço *</label>
                                     <select className="form-input" value={newApptForm.service_id}
                                         onChange={e => setNewApptForm(f => ({ ...f, service_id: e.target.value }))}>
@@ -593,7 +593,7 @@ const AppointmentsTab = ({ appointments: allAppointments, loading: globalLoading
                                         ))}
                                     </select>
                                 </div>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                                     <label>Profissional</label>
                                     <select className="form-input" value={newApptForm.artist_id}
                                         onChange={e => setNewApptForm(f => ({ ...f, artist_id: e.target.value }))}>
@@ -621,7 +621,7 @@ const AppointmentsTab = ({ appointments: allAppointments, loading: globalLoading
                                         <option value="confirmed">Confirmado</option>
                                     </select>
                                 </div>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                                     <label>Observações</label>
                                     <textarea className="form-input" rows={2} value={newApptForm.notes}
                                         onChange={e => setNewApptForm(f => ({ ...f, notes: e.target.value }))}

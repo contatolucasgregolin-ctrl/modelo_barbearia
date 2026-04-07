@@ -302,9 +302,18 @@
 }
 
 @media (max-width: 640px) {
-  .admin-content { padding: 16px; }
-  .admin-topbar-inner { padding: 10px 16px; }
+  .admin-content { padding: 12px; }
+  .admin-topbar-inner { padding: 10px 12px; gap: 8px; }
+  .admin-topbar-title { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+  .admin-topbar-right { gap: 6px; }
   .hide-xs { display: none !important; }
+  
+  .server-status { display: none; } /* Hide status on tiny screens to save space */
+}
+
+@media (max-width: 400px) {
+    .admin-topbar-title { font-size: 0.9rem; max-width: 90px; }
+    .admin-topbar-right button { padding: 6px !important; }
 }
 
 @media (min-width: 2000px) {
@@ -807,6 +816,7 @@
   .admin-table-wrap { border: none; background: transparent; }
   .admin-table, .admin-table thead, .admin-table tbody, .admin-table th, .admin-table td, .admin-table tr {
     display: block;
+    width: 100%;
   }
   .admin-table thead tr {
     position: absolute;
@@ -816,39 +826,57 @@
   .admin-table tr {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    margin-bottom: 12px;
+    margin-bottom: 20px;
     border-radius: var(--radius-lg);
-    padding: 8px;
+    padding: 12px;
     box-shadow: var(--shadow-sm);
   }
   .admin-table td {
     border: none;
     border-bottom: 1px solid rgba(255,255,255,0.03);
     position: relative;
-    padding-left: 45% !important;
+    padding: 12px 12px 12px 40% !important;
     white-space: normal;
-    min-height: 40px;
+    min-height: 48px;
     display: flex;
     align-items: center;
-    font-size: 0.85rem;
+    font-size: 0.88rem;
     text-align: right;
     justify-content: flex-end;
+    word-break: break-word;
   }
-  .admin-table td:last-child { border-bottom: none; }
+  .admin-table td:last-child { 
+      border-bottom: none; 
+      margin-top: 8px;
+      padding-top: 16px !important;
+      border-top: 1px dashed var(--color-border);
+      justify-content: center;
+      padding-left: 12px !important;
+  }
   .admin-table td::before {
     content: attr(data-label);
     position: absolute;
     left: 12px;
-    width: 40%;
+    width: 35%;
     white-space: nowrap;
     text-align: left;
     font-weight: 700;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
     color: var(--color-text-muted);
-    opacity: 0.8;
+    opacity: 0.7;
   }
-  .table-actions { justify-content: flex-end; }
+  .table-actions { 
+      justify-content: center; 
+      width: 100%; 
+      flex-wrap: wrap;
+      gap: 10px;
+  }
+  .action-btn {
+      padding: 10px 14px;
+      min-width: 44px;
+      min-height: 44px;
+  }
 }
 
 .table-actions { display: flex; gap: 6px; }
@@ -1641,37 +1669,40 @@ input[type="file"]::file-selector-button:hover { background: var(--color-primary
   .kanban-mobile-tabs {
     display: flex !important;
     overflow-x: auto;
-    padding: 8px;
-    gap: 8px;
-    background: rgba(20,20,30,0.6);
+    padding: 10px;
+    gap: 12px;
+    background: rgba(20,20,30,0.8);
     border-radius: 12px;
     scrollbar-width: none;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255,255,255,0.05);
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }
   .kanban-mobile-tabs::-webkit-scrollbar { display: none; }
   
   .kanban-tab-btn {
     flex: 0 0 auto;
-    background: transparent;
-    border: none;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
     color: var(--color-text-muted);
-    padding: 8px 16px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
   .kanban-tab-btn.active {
-    color: #fff;
-    background: rgba(255,255,255,0.05);
+    color: var(--color-primary);
+    background: rgba(255,122,0,0.1);
+    border-color: var(--color-primary);
+    transform: scale(1.05);
   }
   .tab-indicator {
-    position: absolute;
-    bottom: -4px;
-    left: 20%;
-    right: 20%;
-    height: 3px;
-    border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    display: none; /* Removed in favor of active scaling */
   }
   .tab-badge {
     background: var(--color-primary);

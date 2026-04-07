@@ -237,15 +237,19 @@ const PromotionInterestsTab = ({ cachedData, refreshAll }) => {
                                             <div className="marketing-label" style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
                                                 <Brain size={12} style={{marginRight:4, verticalAlign: 'middle'}}/> Roteiros de Conversão IA
                                             </div>
-                                            <div className="marketing-btns" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
-                                                <button className="mkt-btn btn-ai-friendly" style={{ fontSize: '0.7rem', padding: '6px 4px' }} onClick={() => handleWhatsApp(item, 'friendly')}>
-                                                    <Sparkles size={11} /> Amigável
+                                            <div className="marketing-btns" style={{ 
+                                                display: 'grid', 
+                                                gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', 
+                                                gap: '8px' 
+                                            }}>
+                                                <button className="mkt-btn btn-ai-friendly" style={{ fontSize: '0.7rem', padding: '8px 4px' }} onClick={() => handleWhatsApp(item, 'friendly')}>
+                                                    <Sparkles size={11} /> <span className="hide-xs">Amigável</span><span className="show-xs">S1</span>
                                                 </button>
-                                                <button className="mkt-btn btn-ai-urgent" style={{ fontSize: '0.7rem', padding: '6px 4px' }} onClick={() => handleWhatsApp(item, 'urgent')}>
-                                                    <Clock size={11} /> Urgência
+                                                <button className="mkt-btn btn-ai-urgent" style={{ fontSize: '0.7rem', padding: '8px 4px' }} onClick={() => handleWhatsApp(item, 'urgent')}>
+                                                    <Clock size={11} /> <span className="hide-xs">Urgência</span><span className="show-xs">S2</span>
                                                 </button>
-                                                <button className="mkt-btn btn-ai-formal" style={{ fontSize: '0.7rem', padding: '6px 4px' }} onClick={() => handleWhatsApp(item, 'formal')}>
-                                                    <User size={11} /> Formal
+                                                <button className="mkt-btn btn-ai-formal" style={{ fontSize: '0.7rem', padding: '8px 4px' }} onClick={() => handleWhatsApp(item, 'formal')}>
+                                                    <User size={11} /> <span className="hide-xs">Formal</span><span className="show-xs">S3</span>
                                                 </button>
                                             </div>
                                         </div>

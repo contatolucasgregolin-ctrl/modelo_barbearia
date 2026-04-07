@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { SiteProvider } from './context/SiteContext';
 import { AuthProvider } from './context/AuthContext';
 import SecurityShield from './components/SecurityShield';
+import BookingChatbot from './components/BookingChatbot';
 
 import Home from './pages/Home';
 
@@ -46,6 +47,7 @@ function PublicLayout() {
         <Outlet />
       </main>
       <Navbar />
+      <BookingChatbot />
     </>
   );
 }

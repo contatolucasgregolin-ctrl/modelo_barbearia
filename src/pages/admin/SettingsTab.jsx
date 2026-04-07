@@ -6,25 +6,31 @@ import Swal from 'sweetalert2';
 
 // ── Local Sub-Components ──
 const SettingsField = ({ label, field, type = 'text', placeholder, form, setForm }) => (
-    <div className="form-group" style={{ flex: 1, minWidth: '250px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>{label}</label>
+    <div className="form-group" style={{ flex: 1, minWidth: 'min(100%, 250px)' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.85rem' }}>{label}</label>
         <input
             type={type}
             className="form-input"
             placeholder={placeholder}
             value={form[field] || ''}
             onChange={e => setForm({ ...form, [field]: e.target.value })}
-            style={{ width: '100%' }}
+            style={{ width: '100%', fontSize: '0.9rem' }}
         />
     </div>
 );
 
 const SettingsTimeField = ({ labelPrefix, prefixKey, form, setForm }) => (
     <div style={{ marginBottom: 15 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '10px' }}>
-            <SettingsField label={`Rótulo (${labelPrefix})`} field={`${prefixKey}Label`} form={form} setForm={setForm} />
-            <SettingsField label="Abre (HH:MM)" field={`${prefixKey}Open`} placeholder="09:00" form={form} setForm={setForm} />
-            <SettingsField label="Fecha (HH:MM)" field={`${prefixKey}Close`} placeholder="19:00" form={form} setForm={setForm} />
+        <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', 
+            gap: '10px' 
+        }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+                <SettingsField label={`Rótulo (${labelPrefix})`} field={`${prefixKey}Label`} form={form} setForm={setForm} />
+            </div>
+            <SettingsField label="Abre" field={`${prefixKey}Open`} placeholder="09:00" form={form} setForm={setForm} />
+            <SettingsField label="Fecha" field={`${prefixKey}Close`} placeholder="19:00" form={form} setForm={setForm} />
         </div>
     </div>
 );

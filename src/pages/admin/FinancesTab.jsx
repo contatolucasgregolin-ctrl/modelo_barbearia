@@ -306,14 +306,14 @@ const FinancesTab = ({ cachedData, refreshAll }) => {
             </div>
 
             {/* ═══ TOP STATS CARDS (always visible) ═══ */}
-            <div className="admin-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+            <div className="admin-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '16px', marginBottom: '28px' }}>
                 <div className="glass-panel stat-card-finance" style={{ padding: '22px', borderRadius: '18px', borderLeft: '5px solid #4ade80' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem', marginBottom: '4px' }}>Total Entradas</p>
                             <h3 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#4ade80', margin: 0 }}>R$ {totals.income.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                         </div>
-                        <ArrowUpCircle size={28} color="#4ade80" />
+                        <ArrowUpCircle size={28} color="#4ade80" className="hide-xs" />
                     </div>
                 </div>
                 <div className="glass-panel stat-card-finance" style={{ padding: '22px', borderRadius: '18px', borderLeft: '5px solid #ef4444' }}>
@@ -322,7 +322,7 @@ const FinancesTab = ({ cachedData, refreshAll }) => {
                             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem', marginBottom: '4px' }}>Total Saídas</p>
                             <h3 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#ef4444', margin: 0 }}>R$ {totals.expense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                         </div>
-                        <ArrowDownCircle size={28} color="#ef4444" />
+                        <ArrowDownCircle size={28} color="#ef4444" className="hide-xs" />
                     </div>
                 </div>
                 <div className="glass-panel stat-card-finance" style={{ padding: '22px', borderRadius: '18px', borderLeft: `5px solid ${totals.balance >= 0 ? 'var(--color-primary)' : '#ef4444'}` }}>
@@ -331,7 +331,7 @@ const FinancesTab = ({ cachedData, refreshAll }) => {
                             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem', marginBottom: '4px' }}>Saldo no Período</p>
                             <h3 style={{ fontSize: '1.6rem', fontWeight: 800, color: totals.balance >= 0 ? 'var(--color-primary)' : '#ef4444', margin: 0 }}>R$ {totals.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                         </div>
-                        <DollarSign size={28} color="var(--color-primary)" />
+                        <DollarSign size={28} color="var(--color-primary)" className="hide-xs" />
                     </div>
                 </div>
 
@@ -345,7 +345,7 @@ const FinancesTab = ({ cachedData, refreshAll }) => {
                                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>de R$ 15.000</span>
                             </div>
                         </div>
-                        <TrendingUp size={24} color="#a78bfa" />
+                        <TrendingUp size={24} color="#a78bfa" className="hide-xs" />
                     </div>
                     <ProgressBar value={totals.income} max={15000} color="#a78bfa" />
                 </div>
@@ -355,7 +355,7 @@ const FinancesTab = ({ cachedData, refreshAll }) => {
                 VIEW: OVERVIEW (Commission Calculator + Stock Consumption)
                ══════════════════════════════════════════════════ */}
             {activeView === 'overview' && (
-                <div className="finances-main-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div className="finances-main-layout" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '20px' }}>
                     
                     {/* Commission Calculator */}
                     <div className="glass-panel" style={{ padding: '24px', borderRadius: '20px' }}>
