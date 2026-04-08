@@ -274,8 +274,8 @@ const BookingChatbot = () => {
 
             if (ptVoice) utterance.voice = ptVoice;
             utterance.lang = 'pt-BR';
-            utterance.rate = 0.95; // Fluid, natural pace
-            utterance.pitch = 1.0; 
+            utterance.rate = 1.05; // Slightly faster for natural communication
+            utterance.pitch = 1.05; // Improved clarity
 
             // Hands-free loop: trigger mic after bot finishes speaking
             utterance.onend = () => {
@@ -346,10 +346,8 @@ const BookingChatbot = () => {
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
             
-            // Fix: Only update input field if NOT in voice mode (hands-free)
-            // or if we want to show it briefly. User requested NOT to see it typing.
-            // setInputValue(transcript); 
-            
+            // Force clear input field during voice interaction to avoid "typing" glitch
+            setInputValue('');
             setIsListening(false);
             
             // Auto-submit tightly coupled to the exact step we were on when speaking
@@ -384,7 +382,9 @@ const BookingChatbot = () => {
         const rawVal = typeof overrideVal === 'string' ? overrideVal : inputValue;
         const val = rawVal.trim();
         if (!val) return;
-        if (typeof overrideVal !== 'string') setInputValue('');
+        
+        // Always reset input when submitting, especially when coming from voice (overrideVal)
+        setInputValue('');
 
         const currentStep = stepRef.current; // GUARANTEED LATEST STATE
 
