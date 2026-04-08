@@ -138,6 +138,7 @@ const BookingChatbot = () => {
     const [isListening, setIsListening] = useState(false);
     const [isVoiceMode, setIsVoiceMode] = useState(false);
     const [voicesLoaded, setVoicesLoaded] = useState(false);
+    const [stepHistory, setStepHistory]   = useState([]);
 
     // Booking data
     const [clientName, setClientName]   = useState('');
@@ -376,6 +377,7 @@ const BookingChatbot = () => {
             setMessages(prev => [...prev, { from: 'bot', text }]);
             speakText(text); // Trigger audio
             if (nextStep) {
+                setStepHistory(prev => [...prev, stepRef.current]);
                 setStep(nextStep);
                 stepRef.current = nextStep; // synchronous update
             }
@@ -502,6 +504,35 @@ const BookingChatbot = () => {
             if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
             return;
         }
+    };
+
+    // ── Navigation ────────────────────────────────────────────────────────
+    const handleBack = () => {
+        if (stepHistory.length === 0) return;
+        const newHistory = [...stepHistory];
+        const prevStep = newHistory.pop();
+        setStepHistory(newHistory);
+        
+        // Reset specific states before returning to the previous UI
+        if (step === STEPS.ASK_TIME) setSelectedTime('');
+        if (step === STEPS.ASK_DATE) setSelectedDate('');
+        if (step === STEPS.ASK_BARBER) setSelectedBarber(null);
+        if (step === STEPS.ASK_SERVICE) setSelectedService(null);
+        if (step === STEPS.ASK_PHONE) {
+            setClientPhone('');
+            // Optional: Bot needs to re-ask for phone
+        }
+        if (step === STEPS.ASK_NAME) setClientName('');
+        
+        setStep(prevStep);
+        stepRef.current = prevStep;
+        
+        // Brief message to acknowledge navigation
+        setIsTyping(true);
+        setTimeout(() => {
+            setIsTyping(false);
+            setMessages(prev => [...prev, { from: 'bot', text: "Sem problemas, vamos alterar essa informação. Qual você prefere agora?" }]);
+        }, 300);
     };
 
     // ── Handle service selection ──────────────────────────────────────────
@@ -805,6 +836,7 @@ const BookingChatbot = () => {
                     {/* Service selection */}
                     {step === STEPS.ASK_SERVICE && !isTyping && (
                         <div className="chatbot-options-grid service-grid">
+                            <button className="chatbot-back-btn-inline" onClick={handleBack}>⬅️ Voltar</button>
                             {services.map(s => (
                                 <button
                                     key={s.id}
@@ -821,6 +853,7 @@ const BookingChatbot = () => {
                     {/* Barber selection */}
                     {step === STEPS.ASK_BARBER && !isTyping && (
                         <div className="chatbot-options-grid barber-grid">
+                            <button className="chatbot-back-btn-inline" onClick={handleBack}>⬅️ Voltar</button>
                             {barbers.map(b => (
                                 <button
                                     key={b.id}
@@ -843,6 +876,7 @@ const BookingChatbot = () => {
                     {/* Date selection */}
                     {step === STEPS.ASK_DATE && !isTyping && (
                         <div className="chatbot-date-picker">
+                            <button className="chatbot-back-btn-inline" onClick={handleBack} style={{ width: '100%', marginBottom: '10px' }}>⬅️ Escolher outro profissional</button>
                             <input
                                 type="date"
                                 className="chatbot-date-input"
@@ -855,6 +889,7 @@ const BookingChatbot = () => {
                     {/* Time selection */}
                     {step === STEPS.ASK_TIME && !isTyping && selectedDate && (
                         <div className="chatbot-time-grid">
+                            <button className="chatbot-back-btn-inline" onClick={handleBack} style={{ gridColumn: '1 / -1', marginBottom: '10px' }}>⬅️ Voltar para Data</button>
                             {getAvailableSlots().map(({ time, disabled, isBooked, isAfterClose }) => (
                                 <button
                                     key={time}

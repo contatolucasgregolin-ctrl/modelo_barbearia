@@ -343,10 +343,11 @@ const Admin = () => {
         };
 
         const showNotification = (notif) => {
-            console.log("[Admin] Disparando Notificação UI:", notif.title);
+            console.log("[Admin] 🔔 DISPARANDO NOTIFICAÇÃO:", notif.title);
             playNotificationSound();
+            
             setNotificationQueue(q => {
-                // Deduplicate only if EXACTLY the same timestamp id (prevents double fires)
+                // Previne duplicação se o ID for exatamente igual
                 if (q.some(n => n.id === notif.id)) return q;
                 
                 setUnreadCount(c => c + 1);
@@ -357,10 +358,13 @@ const Admin = () => {
 
         const masterChannel = supabase.channel('admin-master-sync')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, payload => {
-                console.log("Sync: Mudança em agendamentos", payload.eventType, payload);
+                console.log("[Master Realtime] Evento recebido (Agendamento):", payload.eventType, payload);
+                
+                const apptId = payload.new?.id || payload.old?.id || Date.now();
+                
                 if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
                     showNotification({ 
-                        id: `appt-${Date.now()}-${payload.new?.id}`, 
+                        id: `appt-${apptId}-${Date.now()}`, 
                         title: '🔔 Novo Agendamento!', 
                         message: `Um novo horário (${payload.new?.time?.slice(0,5)}) foi solicitado.`, 
                         type: 'appointment' 
@@ -369,10 +373,13 @@ const Admin = () => {
                 setTimeout(() => refreshAllData('appointments'), 150);
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_subscriptions' }, payload => {
-                console.log("Sync: Mudança em planos", payload.eventType, payload);
+                console.log("[Master Realtime] Evento recebido (Planos):", payload.eventType, payload);
+                
+                const subId = payload.new?.id || payload.old?.id || Date.now();
+                
                 if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'active')) {
                     showNotification({ 
-                        id: `sub-${Date.now()}-${payload.new?.id}`, 
+                        id: `sub-${subId}-${Date.now()}`, 
                         title: '⭐ Nova Assinatura!', 
                         message: 'Um cliente acaba de aderir ao seu Clube!', 
                         type: 'subscription' 
@@ -381,10 +388,13 @@ const Admin = () => {
                 setTimeout(() => refreshAllData('subscriptions'), 200);
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'promotion_interests' }, payload => {
-                console.log("Sync: Mudança em promoções", payload.eventType, payload);
+                console.log("[Master Realtime] Evento recebido (Promoções):", payload.eventType, payload);
+                
+                const promoId = payload.new?.id || payload.old?.id || Date.now();
+                
                 if (payload.eventType === 'INSERT') {
                     showNotification({ 
-                        id: `promo-${Date.now()}-${payload.new?.id}`, 
+                        id: `promo-${promoId}-${Date.now()}`, 
                         title: '🎁 Novo Interesse!', 
                         message: 'Temos um novo cliente interessado em promoções!', 
                         type: 'promo_interest' 
@@ -398,7 +408,18 @@ const Admin = () => {
             console.log("[Admin] Removendo Master Realtime Channel");
             supabase.removeChannel(masterChannel);
         };
+        };
     }, [isAdmin, refreshAllData]);
+
+    // Auto-dismiss notification after 8 seconds
+    useEffect(() => {
+        if (activeAlert) {
+            const timer = setTimeout(() => {
+                setActiveAlert(null);
+            }, 8000);
+            return () => clearTimeout(timer);
+        }
+    }, [activeAlert]);
 
     const dismissNotification = () => {
         setNotificationQueue(q => q.slice(1));
