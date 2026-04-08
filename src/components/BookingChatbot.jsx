@@ -525,19 +525,67 @@ const BookingChatbot = () => {
     };
 
     // ── Handle date selection ─────────────────────────────────────────────
-    const handleDateSelect = (date) => {
+    const handleDateSelect = async (date) => {
         const dayInfo = getDayInfo(date);
+        
+        // 1. Basic Day Closure Check (e.g. Sundays)
         if (dayInfo?.closed) {
             setSelectedDate(date);
             botSay(`Olha, infelizmente não atendemos aos domingos. Você teria outro dia de preferência?`);
             return;
         }
-        userSay(`📅 ${formatDate(date)}`);
-        setSelectedDate(date);
-        botSay(
-            `Data anotada! E qual seria o melhor <strong>horário</strong> para você?`,
-            STEPS.ASK_TIME
-        );
+
+        setIsTyping(true); // Visual indicator while checking database
+
+        try {
+            // 2. Proactive Availability Check (Anticipate ASK_TIME results)
+            const { data: booked } = await supabase
+                .from('appointments').select('time')
+                .eq('date', date)
+                .eq('artist_id', selectedBarber.id)
+                .in('status', ['pending', 'confirmed', 'finished']);
+
+            const bookedTimesOnDate = booked ? booked.map(a => (a.time || '').slice(0, 5)) : [];
+            
+            const todayStr = getTodayStr();
+            const now = new Date();
+            const nowHour = now.getHours() + (now.getMinutes() / 60);
+            
+            // Filter ALL_SLOTS just like getAvailableSlots() does but locally first
+            const availableSlots = ALL_SLOTS.filter(time => {
+                const [h, min] = time.split(':').map(Number);
+                const slotHour = h + (min / 60);
+                const isBooked = bookedTimesOnDate.includes(time);
+                const isPast = date === todayStr && slotHour <= nowHour;
+                const isAfterClose = dayInfo ? slotHour >= dayInfo.close : false;
+                return !(isBooked || isPast || isAfterClose);
+            });
+
+            setIsTyping(false);
+
+            if (availableSlots.length === 0) {
+                // Inform user and STAY on ASK_DATE
+                botSay(`Poxa, para o dia <strong>${formatDate(date)}</strong> a agenda do profissional <strong>${selectedBarber.name}</strong> já está lotada ou não há mais horários disponíveis.<br/><br/>Você poderia escolher <strong>outra data</strong>, por favor?`);
+                return;
+            }
+
+            // 3. Proceed only if slots exist
+            userSay(`📅 ${formatDate(date)}`);
+            setSelectedDate(date);
+            setBookedTimes(bookedTimesOnDate); // Pre-fill to avoid UI flicker
+            botSay(
+                `Data anotada! E qual seria o melhor <strong>horário</strong> para você?`,
+                STEPS.ASK_TIME
+            );
+
+        } catch (error) {
+            console.error("[Availability Check Error]", error);
+            setIsTyping(false);
+            // Safety fallback: allow transition but UI buttons will still be disabled naturally
+            userSay(`📅 ${formatDate(date)}`);
+            setSelectedDate(date);
+            botSay(`Certo! Vamos conferir os horários disponíveis para esse dia:`, STEPS.ASK_TIME);
+        }
     };
 
     // ── Handle time selection ─────────────────────────────────────────────
