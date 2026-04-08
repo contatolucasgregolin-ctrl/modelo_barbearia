@@ -330,23 +330,38 @@ const Admin = () => {
         
         const playNotificationSound = () => {
             try {
+                // Mixkit reliable backup SFX
                 const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-                audio.volume = 1.0;
-                audio.play().catch(e => console.warn("Audio bloqueado pelo navegador", e));
-            } catch(e) { console.warn("Erro no audio", e); }
+                audio.volume = 0.8;
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.warn("[Admin] Reprodução automática de som bloqueada pelo navegador.");
+                    });
+                }
+            } catch(e) { console.warn("[Admin] Erro ao tentar reproduzir áudio:", e); }
+        };
+
+        const showNotification = (notif) => {
+            playNotificationSound();
+            setNotificationQueue(q => {
+                // Deduplicate within 5 seconds
+                if (q.some(n => n.message === notif.message && Date.now() - n.id < 5000)) return q;
+                setUnreadCount(c => c + 1);
+                setActiveAlert(notif);
+                return [notif, ...q];
+            });
         };
 
         const masterChannel = supabase.channel('admin-master-sync')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, payload => {
                 console.log("Sync: Mudança em agendamentos", payload.eventType, payload);
                 if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
-                    playNotificationSound();
-                    const notif = { id: Date.now(), title: '🔔 Novo Agendamento!', message: `Você recebeu um novo pedido de agendamento.`, type: 'appointment' };
-                    setNotificationQueue(q => {
-                        if (q.some(n => n.message === notif.message && Date.now() - n.id < 5000)) return q;
-                        setUnreadCount(c => c + 1);
-                        setActiveAlert(notif);
-                        return [notif, ...q];
+                    showNotification({ 
+                        id: Date.now(), 
+                        title: '🔔 Novo Agendamento!', 
+                        message: `Um novo horário acaba de ser solicitado no sistema.`, 
+                        type: 'appointment' 
                     });
                 }
                 setTimeout(() => refreshAllData('appointments'), 150);
@@ -354,13 +369,11 @@ const Admin = () => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_subscriptions' }, payload => {
                 console.log("Sync: Mudança em planos", payload.eventType, payload);
                 if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'active')) {
-                    playNotificationSound();
-                    const notif = { id: Date.now() + 1, title: '⭐ Nova Assinatura!', message: 'Um cliente aderiu a um clube de assinaturas!', type: 'subscription' };
-                    setNotificationQueue(q => {
-                        if (q.some(n => n.message === notif.message && Date.now() - n.id < 5000)) return q;
-                        setUnreadCount(c => c + 1);
-                        setActiveAlert(notif);
-                        return [notif, ...q];
+                    showNotification({ 
+                        id: Date.now() + 1, 
+                        title: '⭐ Nova Assinatura!', 
+                        message: 'Um cliente acaba de aderir ao seu Clube de Assinaturas!', 
+                        type: 'subscription' 
                     });
                 }
                 setTimeout(() => refreshAllData('subscriptions'), 200);
@@ -368,13 +381,11 @@ const Admin = () => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'promotion_interests' }, payload => {
                 console.log("Sync: Mudança em promoções", payload.eventType, payload);
                 if (payload.eventType === 'INSERT') {
-                    playNotificationSound();
-                    const notif = { id: Date.now() + 2, title: '🎁 Novo Interesse!', message: 'Alguém clicou em uma promoção!', type: 'promo_interest' };
-                    setNotificationQueue(q => {
-                        if (q.some(n => n.message === notif.message && Date.now() - n.id < 5000)) return q;
-                        setUnreadCount(c => c + 1);
-                        setActiveAlert(notif);
-                        return [notif, ...q];
+                    showNotification({ 
+                        id: Date.now() + 2, 
+                        title: '🎁 Novo Interesse!', 
+                        message: 'Temos um novo cliente interessado em suas promoções!', 
+                        type: 'promo_interest' 
                     });
                 }
                 setTimeout(() => refreshAllData('interests'), 200);

@@ -40,108 +40,88 @@ export const SiteProvider = ({ children }) => {
         setTheme(prev => prev === 'dark' ? 'light' : 'dark');
     }, []);
 
-    const fetchSiteData = async () => {
+    const fetchSiteData = async (targetTable = null) => {
         try {
-            console.log('[SiteContext] Fetching all site data...');
+            console.log(`[SiteContext] Fetching ${targetTable || 'all'} data...`);
             
             const safeFetch = async (query) => {
-                try {
-                    const result = await query;
-                    if (result.error) throw result.error;
-                    return result;
-                } catch (err) {
-                    console.error("[SiteContext] DB Fetch Error:", err);
-                    return { data: [], error: err };
-                }
+                const { data, error } = await query;
+                if (error) throw error;
+                return { data: data || [] };
             };
 
-            // Fetch ALL data in parallel, individual catch prevents entire failure
-            const [settingsRes, servicesRes, artistsRes, galleryRes, categoriesRes, plansRes, promosRes] = await Promise.all([
-                safeFetch(supabase.from('settings').select('*')),
-                safeFetch(supabase.from('services').select('*').order('name')),
-                safeFetch(supabase.from('artists').select('*').eq('active', true).order('name')),
-                safeFetch(supabase.from('gallery').select('*, gallery_categories(name)').order('featured', { ascending: false }).order('created_at', { ascending: false })),
-                safeFetch(supabase.from('gallery_categories').select('*').order('name')),
-                safeFetch(supabase.from('plans').select('*').order('price')),
-                safeFetch(supabase.from('promotions').select('*').order('created_at', { ascending: false }))
-            ]);
+            const queries = {
+                settings: supabase.from('settings').select('*'),
+                services: supabase.from('services').select('*').order('name'),
+                artists: supabase.from('artists').select('*').eq('active', true).order('name'),
+                gallery: supabase.from('gallery').select('*, gallery_categories(name)').order('featured', { ascending: false }).order('created_at', { ascending: false }),
+                galleryCategories: supabase.from('gallery_categories').select('*').order('name'),
+                plans: supabase.from('plans').select('*').order('price'),
+                promotions: supabase.from('promotions').select('*').order('created_at', { ascending: false })
+            };
 
-            const settingsData = settingsRes.data;
-            const servicesData = servicesRes.data;
-            const artistsData = artistsRes.data;
-
-            let contact = {};
-            let hours = {};
-            let branding = {};
-
-            if (settingsData) {
-                contact = settingsData.find(s => s.key_name === 'contact')?.value || {};
-                branding = settingsData.find(s => s.key_name === 'branding')?.value || {};
-                const ops = settingsData.find(s => s.key_name === 'operating_hours')?.value || {};
-                hours = {
-                    weekdays: { label: ops.weekdays?.label || 'Segunda a Sexta', hours: ops.weekdays?.open ? `${ops.weekdays.open} - ${ops.weekdays.close}` : 'Fechado' },
-                    specialDays: { label: ops.saturdays?.label || 'Sábados', hours: ops.saturdays?.open ? `${ops.saturdays.open} - ${ops.saturdays.close}` : 'Fechado' },
-                    weekend: { label: ops.sundays?.label || 'Domingos', hours: ops.sundays?.open ? `${ops.sundays.open} - ${ops.sundays.close}` : 'Fechado' }
-                };
+            let results = {};
+            if (targetTable && queries[targetTable]) {
+                const res = await safeFetch(queries[targetTable]);
+                results[targetTable] = res.data;
+            } else {
+                const keys = Object.keys(queries);
+                const fetched = await Promise.all(Object.values(queries).map(q => safeFetch(q)));
+                keys.forEach((key, i) => results[key] = fetched[i].data);
             }
 
-            const services = (servicesData || []).map(s => ({
-                id: s.id,
-                name: s.name,
-                desc: s.description,
-                price: parseFloat(s.price) || 0,
-                duration: `${s.duration_mins || 0}min`,
-                isFeatured: s.is_featured
-            }));
+            setSiteData(prev => {
+                const newData = { ...prev };
+                
+                if (results.settings) {
+                    const contact = results.settings.find(s => s.key_name === 'contact')?.value || {};
+                    const branding = results.settings.find(s => s.key_name === 'branding')?.value || {};
+                    const ops = results.settings.find(s => s.key_name === 'operating_hours')?.value || {};
+                    
+                    newData.contact = {
+                        phone: contact.phone || '(11)93940-7229',
+                        whatsapp: contact.whatsapp || '5511939407229',
+                        instagram: contact.instagram || '',
+                        address: contact.address || ''
+                    };
+                    newData.logo = branding.logoUrl || '';
+                    newData.operatingHours = {
+                        weekdays: { label: ops.weekdays?.label || 'Segunda a Sábado', hours: ops.weekdays?.open ? `${ops.weekdays.open} - ${ops.weekdays.close}` : '14:00 - 22:00' },
+                        specialDays: { label: ops.saturdays?.label || 'Domingos', hours: ops.saturdays?.open ? `${ops.saturdays.open} - ${ops.saturdays.close}` : 'Fechado' },
+                        weekend: { label: ops.sundays?.label || 'Feriados', hours: ops.sundays?.open ? `${ops.sundays.open} - ${ops.sundays.close}` : 'Fechado' }
+                    };
+                }
 
-            const barbers = (artistsData || []).map(a => ({
-                id: a.id,
-                name: a.name,
-                specialty: a.specialty,
-                photo: a.photo_url || 'https://via.placeholder.com/150?text=Professional',
-                instagram: a.instagram
-            }));
+                if (results.services) {
+                    newData.services = results.services.map(s => ({
+                        id: s.id,
+                        name: s.name,
+                        desc: s.description,
+                        price: parseFloat(s.price) || 0,
+                        duration: `${s.duration_mins || 0}min`,
+                        isFeatured: s.is_featured
+                    }));
+                }
 
-            const newData = {
-                logo: branding.logoUrl || branding.logoUrlLight || '',
-                banner: branding.bannerUrl || branding.bannerUrlLight || '',
-                logoUrl: branding.logoUrl || branding.logoUrlLight || '',
-                bannerUrl: branding.bannerUrl || branding.bannerUrlLight || '',
-                menuTitle: branding.menuTitle || 'BARBEARIA CLÁSSICA',
-                heroTitle: branding.heroTitle || 'BARBEARIA CLÁSSICA',
-                heroSubtitle: branding.heroSubtitle || 'Estilo Clássico. Atendimento Premium.',
-                contact: {
-                    phone: contact.phone || '(11)93940-7229',
-                    whatsapp: contact.whatsapp || '5511939407229',
-                    instagram: contact.instagram || 'https://instagram.com/barbeariaclassica',
-                    address: contact.address || 'Rua. Centro, 159 - Centro'
-                },
-                operatingHours: hours.weekdays ? hours : {
-                    weekdays: { label: 'Segunda a Sábado', hours: '14:00 - 22:00' },
-                    specialDays: { label: 'Domingos', hours: 'Fechado' },
-                    weekend: { label: 'Feriados', hours: 'Fechado' }
-                },
-                services,
-                barbers,
-                gallery: galleryRes.data || [],
-                galleryCategories: categoriesRes.data || [],
-                plans: plansRes.data || [],
-                promotions: promosRes.data || []
-            };
+                if (results.artists) {
+                    newData.barbers = results.artists.map(a => ({
+                        id: a.id,
+                        name: a.name,
+                        specialty: a.specialty,
+                        photo: a.photo_url || 'https://via.placeholder.com/150',
+                        instagram: a.instagram
+                    }));
+                }
 
-            console.log('[SiteContext] Data loaded:', {
-                services: (services || []).length,
-                plans: (plansRes?.data || []).length,
-                promotions: (promosRes?.data || []).length,
-                gallery: (galleryRes?.data || []).length
+                if (results.gallery) newData.gallery = results.gallery;
+                if (results.galleryCategories) newData.galleryCategories = results.galleryCategories;
+                if (results.plans) newData.plans = results.plans;
+                if (results.promotions) newData.promotions = results.promotions;
+
+                return newData;
             });
-
-            setSiteData(prev => ({
-                ...prev,
-                ...newData
-            }));
         } catch (error) {
-            console.error("[SiteContext] Error fetching site configuration:", error);
+            console.error("[SiteContext] Error:", error);
         } finally {
             setLoading(false);
         }
@@ -154,39 +134,28 @@ export const SiteProvider = ({ children }) => {
     useEffect(() => {
         fetchSiteData();
 
-        let debounceTimer;
-        const debouncedFetch = () => {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                fetchRef.current?.();
-            }, 300);
+        const debounceTimers = {};
+        const debouncedFetch = (table) => {
+            if (debounceTimers[table]) clearTimeout(debounceTimers[table]);
+            debounceTimers[table] = setTimeout(() => {
+                fetchRef.current?.(table);
+                delete debounceTimers[table];
+            }, 500);
         };
 
-        // Real-time listeners para atualizar dados automaticamente
         const settingsChannel = supabase.channel('site-settings-realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, () => {
-                console.log('[SiteContext] Settings changed, refreshing...');
-                debouncedFetch();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => {
-                console.log('[SiteContext] Services changed, refreshing...');
-                debouncedFetch();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'plans' }, () => {
-                console.log('[SiteContext] Plans changed, refreshing...');
-                debouncedFetch();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'promotions' }, () => {
-                console.log('[SiteContext] Promotions changed, refreshing...');
-                debouncedFetch();
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, () => debouncedFetch('settings'))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => debouncedFetch('services'))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'plans' }, () => debouncedFetch('plans'))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'promotions' }, () => debouncedFetch('promotions'))
             .subscribe();
 
         return () => {
-            clearTimeout(debounceTimer);
+            Object.values(debounceTimers).forEach(t => clearTimeout(t));
             supabase.removeChannel(settingsChannel);
         };
-    }, []); // Sem dependência de "theme" — não há razão para re-fetch ao mudar tema
+    }, []);
+ // Sem dependência de "theme" — não há razão para re-fetch ao mudar tema
 
     const updateSiteData = useCallback(async () => {
         setLoading(true);

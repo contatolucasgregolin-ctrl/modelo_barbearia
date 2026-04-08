@@ -47,59 +47,63 @@ const DashboardTab = React.memo(({ cachedData, refreshAll }) => {
     const [servicesData, setServicesData] = useState([]);
     const [barbersData, setBarbersData] = useState([]);
 
-    const processData = useCallback(async (appointments, finances, subsCount) => {
+    const processData = useCallback(async (appointments = [], finances = [], subsCount = 0) => {
         try {
             const dailyRevenue = {};
+            const serviceCounts = {};
+            const barberStats = {};
+            let totalRev = 0;
+            const customerIds = new Set();
+
             const last7Days = [...Array(7)].map((_, i) => {
                 const d = new Date();
                 d.setDate(d.getDate() - i);
                 return d.toISOString().split('T')[0];
             }).reverse();
-
             last7Days.forEach(date => dailyRevenue[date] = 0);
-            finances?.forEach(f => {
+
+            finances.forEach(f => {
+                const amt = Number(f.amount) || 0;
+                totalRev += amt;
                 if (dailyRevenue[f.date] !== undefined) {
-                    dailyRevenue[f.date] += Number(f.amount);
+                    dailyRevenue[f.date] += amt;
                 }
             });
 
-            setRevenueData(Object.entries(dailyRevenue).map(([date, amount]) => ({
-                name: new Date(date).toLocaleDateString('pt-BR', { weekday: 'short' }),
-                valor: amount
-            })));
-
-            const serviceCounts = {};
-            appointments?.forEach(a => {
+            appointments.forEach(a => {
                 const sName = a.service_name || a.service?.name || 'Outros';
                 serviceCounts[sName] = (serviceCounts[sName] || 0) + 1;
+
+                const bName = a.barber_name || a.artist?.name || 'N/A';
+                if (!barberStats[bName]) barberStats[bName] = { name: bName, atendimentos: 0, faturamento: 0 };
+                barberStats[bName].atendimentos += 1;
+                barberStats[bName].faturamento += Number(a.price || 0);
+
+                if (a.customer_id) customerIds.add(a.customer_id);
             });
+
+            setRevenueData(last7Days.map(date => ({
+                name: new Date(date).toLocaleDateString('pt-BR', { weekday: 'short' }),
+                valor: dailyRevenue[date]
+            })));
+
             setServicesData(Object.entries(serviceCounts)
                 .map(([name, value]) => ({ name, value }))
                 .sort((a, b) => b.value - a.value)
                 .slice(0, 5)
             );
 
-            const barberStats = {};
-            appointments?.forEach(a => {
-                const bName = a.barber_name || a.artist?.name || 'N/A';
-                if (!barberStats[bName]) barberStats[bName] = { name: bName, atendimentos: 0, faturamento: 0 };
-                barberStats[bName].atendimentos += 1;
-                barberStats[bName].faturamento += Number(a.price || 0);
-            });
             setBarbersData(Object.values(barberStats).sort((a, b) => b.atendimentos - a.atendimentos));
 
-            const totalRev = finances?.reduce((sum, f) => sum + Number(f.amount), 0) || 0;
-            const uniqueCustomers = new Set(appointments?.map(a => a.customer_id)).size;
-
             setStats({
-                revenue: Number(totalRev) || 0,
-                appointments: appointments?.length || 0,
-                customers: Number(uniqueCustomers) || 0,
-                ticket: (appointments?.length > 0) ? (Number(totalRev) / appointments.length) : 0,
-                retention: uniqueCustomers ? Math.round((appointments.length / uniqueCustomers) * 10) / 10 : 0,
+                revenue: totalRev,
+                appointments: appointments.length,
+                customers: customerIds.size,
+                ticket: appointments.length > 0 ? totalRev / appointments.length : 0,
+                retention: customerIds.size ? Math.round((appointments.length / customerIds.size) * 10) / 10 : 0,
                 activeSubs: Number(subsCount) || 0
             });
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("[Dashboard] Error processing data:", e); }
     }, []);
 
     useEffect(() => {

@@ -154,6 +154,7 @@ const BookingChatbot = () => {
     const messagesEndRef = useRef(null);
     const inputRef       = useRef(null);
     const utteranceRef   = useRef(null); // Fix Chrome GC Voice bug
+    const recognitionRef = useRef(null); // Fix Chrome GC STT bug
     
     // Stable refs for STT loop 
     const stepRef = useRef(step);
@@ -279,7 +280,13 @@ const BookingChatbot = () => {
             // Hands-free loop: trigger mic after bot finishes speaking
             utterance.onend = () => {
                 if (isVoiceModeRef.current && isOpenRef.current) {
-                    setTimeout(() => startListening(), 400);
+                    console.log("[Chatbot] Bot finished speaking, auto-restarting mic in 500ms...");
+                    setTimeout(() => {
+                        // Double check if we are still in voice mode and open
+                        if (isVoiceModeRef.current && isOpenRef.current && !window.speechSynthesis.speaking) {
+                            startListening();
+                        }
+                    }, 500);
                 }
             };
 
@@ -291,9 +298,12 @@ const BookingChatbot = () => {
         const nextState = !isAudioEnabled;
         setIsAudioEnabled(nextState);
         if (nextState) {
-            speakText("Modo de voz ativado.", 100);
+            setIsVoiceMode(true); // Automatically enable voice loop if speaker is on
+            speakText("Modo de voz e escuta automática ativados.", 100);
         } else {
+            setIsVoiceMode(false);
             window.speechSynthesis.cancel();
+            if (recognitionRef.current) recognitionRef.current.stop();
         }
     };
 
@@ -305,26 +315,47 @@ const BookingChatbot = () => {
             return;
         }
 
-        // Set voice mode to true for hands-free loop
+        // Ensure we don't have multiple instances
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch(e) {}
+        }
+
         setIsVoiceMode(true);
         if (!isAudioEnabled) setIsAudioEnabled(true);
 
         const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition; // Prevent GC
+        
         recognition.lang = 'pt-BR';
         recognition.continuous = false;
         recognition.interimResults = false;
 
         recognition.onstart = () => setIsListening(true);
-        recognition.onend = () => setIsListening(false);
-        recognition.onerror = () => setIsListening(false);
+        recognition.onend = () => {
+            setIsListening(false);
+            recognitionRef.current = null;
+        };
+        recognition.onerror = (event) => {
+            console.error("[STT Error]", event.error);
+            setIsListening(false);
+            recognitionRef.current = null;
+            // If it was a network or no-speech error, we might want to retry later, 
+            // but for now let's just reset state.
+        };
 
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
-            setInputValue(transcript);
-            // Auto-submit tightly coupled to the exact step we were on when speaking!
+            
+            // Fix: Only update input field if NOT in voice mode (hands-free)
+            // or if we want to show it briefly. User requested NOT to see it typing.
+            // setInputValue(transcript); 
+            
+            setIsListening(false);
+            
+            // Auto-submit tightly coupled to the exact step we were on when speaking
             setTimeout(() => {
                 handleTextSubmit(transcript);
-            }, 300);
+            }, 250);
         };
 
         recognition.start();
