@@ -336,17 +336,19 @@ const Admin = () => {
                 const playPromise = audio.play();
                 if (playPromise !== undefined) {
                     playPromise.catch(error => {
-                        console.warn("[Admin] Reprodução automática de som bloqueada pelo navegador.");
+                        console.warn("[Admin] Som bloqueado. Habilite 'Reprodução Automática' no navegador para alertas sonoros.");
                     });
                 }
-            } catch(e) { console.warn("[Admin] Erro ao tentar reproduzir áudio:", e); }
+            } catch(e) { console.warn("[Admin] Falha no áudio:", e); }
         };
 
         const showNotification = (notif) => {
+            console.log("[Admin] Disparando Notificação UI:", notif.title);
             playNotificationSound();
             setNotificationQueue(q => {
-                // Deduplicate within 5 seconds
-                if (q.some(n => n.message === notif.message && Date.now() - n.id < 5000)) return q;
+                // Deduplicate only if EXACTLY the same timestamp id (prevents double fires)
+                if (q.some(n => n.id === notif.id)) return q;
+                
                 setUnreadCount(c => c + 1);
                 setActiveAlert(notif);
                 return [notif, ...q];
@@ -358,9 +360,9 @@ const Admin = () => {
                 console.log("Sync: Mudança em agendamentos", payload.eventType, payload);
                 if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
                     showNotification({ 
-                        id: Date.now(), 
+                        id: `appt-${Date.now()}-${payload.new?.id}`, 
                         title: '🔔 Novo Agendamento!', 
-                        message: `Um novo horário acaba de ser solicitado no sistema.`, 
+                        message: `Um novo horário (${payload.new?.time?.slice(0,5)}) foi solicitado.`, 
                         type: 'appointment' 
                     });
                 }
@@ -370,9 +372,9 @@ const Admin = () => {
                 console.log("Sync: Mudança em planos", payload.eventType, payload);
                 if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'active')) {
                     showNotification({ 
-                        id: Date.now() + 1, 
+                        id: `sub-${Date.now()}-${payload.new?.id}`, 
                         title: '⭐ Nova Assinatura!', 
-                        message: 'Um cliente acaba de aderir ao seu Clube de Assinaturas!', 
+                        message: 'Um cliente acaba de aderir ao seu Clube!', 
                         type: 'subscription' 
                     });
                 }
@@ -382,9 +384,9 @@ const Admin = () => {
                 console.log("Sync: Mudança em promoções", payload.eventType, payload);
                 if (payload.eventType === 'INSERT') {
                     showNotification({ 
-                        id: Date.now() + 2, 
+                        id: `promo-${Date.now()}-${payload.new?.id}`, 
                         title: '🎁 Novo Interesse!', 
-                        message: 'Temos um novo cliente interessado em suas promoções!', 
+                        message: 'Temos um novo cliente interessado em promoções!', 
                         type: 'promo_interest' 
                     });
                 }

@@ -370,7 +370,7 @@ const BookingChatbot = () => {
                 setStep(nextStep);
                 stepRef.current = nextStep; // synchronous update
             }
-        }, 900);
+        }, 400); // Reduced delay for snappier conversation
     };
 
     const userSay = (text) => {
@@ -440,7 +440,52 @@ const BookingChatbot = () => {
             userSay(val);
             setClientPhone(val);
             const topic = currentStep === STEPS.ASK_PHONE_PLAN ? "Planos" : "Promoções";
-            botSay(`Fechado! O time já foi avisado. Em breve, enviaremos todas as novidades sobre ${topic} diretor no seu celular!`, STEPS.DONE);
+            
+            // PERSISTENCE: Save interest to database so it triggers Admin Notification
+            const persistInterest = async () => {
+                try {
+                    // 1. Get/Create Customer
+                    let customerId = null;
+                    const { data: existing } = await supabase.from('customers').select('id').eq('phone', val).maybeSingle();
+                    if (existing) {
+                        customerId = existing.id;
+                    } else {
+                        const { data: newCust } = await supabase.from('customers').insert([{ name: clientName || 'Interessado Chatbot', phone: val }]).select('id').single();
+                        if (newCust) customerId = newCust.id;
+                    }
+
+                    if (!customerId) return;
+
+                    // 2. Insert into Interest Table
+                    if (currentStep === STEPS.ASK_PHONE_PROMO) {
+                        const { data: firstPromo } = await supabase.from('promotions').select('id').eq('active', true).limit(1).maybeSingle();
+                        if (firstPromo) {
+                            await supabase.from('promotion_interests').insert([{
+                                customer_id: customerId,
+                                promotion_id: firstPromo.id,
+                                status: 'pending',
+                                notes: 'Solicitado via Assistente Virtual'
+                            }]);
+                        }
+                    } else {
+                        const { data: firstPlan } = await supabase.from('plans').select('id').eq('active', true).limit(1).maybeSingle();
+                        if (firstPlan) {
+                            await supabase.from('plan_subscriptions').insert([{
+                                customer_id: customerId,
+                                plan_id: firstPlan.id,
+                                status: 'pending',
+                                notes: 'Interesse via Assistente Virtual'
+                            }]);
+                        }
+                    }
+                } catch (e) {
+                    console.error("[Chatbot Persistence Error]", e);
+                }
+            };
+            
+            persistInterest();
+
+            botSay(`Fechado! O time já foi avisado. Em breve, enviaremos todas as novidades sobre ${topic} direto no seu celular!`, STEPS.DONE);
             
             // Redirect to whatsapp
             const phone = (siteData?.contact?.whatsapp || '').replace(/\D/g, '');
