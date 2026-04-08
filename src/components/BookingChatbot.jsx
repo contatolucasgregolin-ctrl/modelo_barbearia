@@ -238,7 +238,7 @@ const BookingChatbot = () => {
             setTimeout(() => botSay(
                 `👋 Olá! Sou o assistente virtual da Barbearia.<br/><br/>Posso te ajudar com <strong>Agendamentos</strong>, conferir <strong>Promoções</strong>, ou explicar nossos <strong>Planos de Assinatura</strong>. O que você deseja fazer hoje?`,
                 STEPS.INTENT_SELECTION
-            ), 400);
+            ), 800);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
@@ -263,10 +263,9 @@ const BookingChatbot = () => {
 
             const plainText = stripHTML(text);
             const utterance = new SpeechSynthesisUtterance(plainText);
-            utteranceRef.current = utterance; // Prevent Garage Collection hook silence
+            utteranceRef.current = utterance; 
             
             const voices = window.speechSynthesis.getVoices();
-            
             const mascNames = ['Google português do Brasil', 'Daniel Natural', 'Guilherme', 'Felipe', 'Ricardo'];
             const ptVoice = voices.find(v => v.lang.includes('pt') && mascNames.some(name => v.name.includes(name))) ||
                             voices.find(v => v.lang.includes('pt-BR')) || 
@@ -274,19 +273,27 @@ const BookingChatbot = () => {
 
             if (ptVoice) utterance.voice = ptVoice;
             utterance.lang = 'pt-BR';
-            utterance.rate = 1.0; // Professional, fluid pace
-            utterance.pitch = 0.9; // Deeper, more authoritative tone
+            utterance.rate = 1.0; 
+            utterance.pitch = 0.9; 
 
-            // Hands-free loop: trigger mic after bot finishes speaking
-            utterance.onend = () => {
+            utterance.onstart = () => {
+                // BARGE-IN: Start listening slightly after bot starts speaking
+                // This allows the user to interrupt the bot
                 if (isVoiceModeRef.current && isOpenRef.current) {
-                    console.log("[Chatbot] Bot finished speaking, auto-restarting mic in 500ms...");
                     setTimeout(() => {
-                        // Double check if we are still in voice mode and open
-                        if (isVoiceModeRef.current && isOpenRef.current && !window.speechSynthesis.speaking) {
-                            startListening();
+                        if (window.speechSynthesis.speaking && isVoiceModeRef.current) {
+                            console.log("[Chatbot] Parallel listening activated for barge-in...");
+                            startListening(true); // true = barge-in mode
                         }
-                    }, 500);
+                    }, 1200); // 1.2s grace period to avoid bot hearing its own first words
+                }
+            };
+
+            utterance.onend = () => {
+                // If bot finished naturally (not interrupted), ensure mic is on
+                if (isVoiceModeRef.current && isOpenRef.current && !isListening) {
+                    console.log("[Chatbot] Bot finished speaking, ensuring mic is on...");
+                    startListening();
                 }
             };
 
@@ -308,52 +315,54 @@ const BookingChatbot = () => {
     };
 
     // ── Speech Recognition (STT) ──────────────────────────────────────────
-    const startListening = () => {
+    const startListening = (isBargeIn = false) => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            alert("Seu navegador não suporta reconhecimento de voz.");
-            return;
-        }
+        if (!SpeechRecognition) return;
 
-        // Ensure we don't have multiple instances
+        // If already listening, don't start again
+        if (isListening && !isBargeIn) return;
+
         if (recognitionRef.current) {
             try { recognitionRef.current.stop(); } catch(e) {}
         }
 
         setIsVoiceMode(true);
-        if (!isAudioEnabled) setIsAudioEnabled(true);
-
         const recognition = new SpeechRecognition();
-        recognitionRef.current = recognition; // Prevent GC
+        recognitionRef.current = recognition;
         
         recognition.lang = 'pt-BR';
         recognition.continuous = false;
-        recognition.interimResults = false;
+        recognition.interimResults = true; // Faster detection
 
         recognition.onstart = () => setIsListening(true);
+        
+        // INTERRUPT LOGIC: When sound is detected, stop bot immediately
+        recognition.onsoundstart = () => {
+            if (window.speechSynthesis.speaking) {
+                console.log("[Chatbot] Barge-in! Audio detected, killing bot speech.");
+                window.speechSynthesis.cancel();
+            }
+        };
+
         recognition.onend = () => {
             setIsListening(false);
             recognitionRef.current = null;
         };
-        recognition.onerror = (event) => {
-            console.error("[STT Error]", event.error);
+        
+        recognition.onerror = () => {
             setIsListening(false);
             recognitionRef.current = null;
-            // If it was a network or no-speech error, we might want to retry later, 
-            // but for now let's just reset state.
         };
 
         recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            
-            // Force clear input field during voice interaction to avoid "typing" glitch
-            setInputValue('');
-            setIsListening(false);
-            
-            // Auto-submit tightly coupled to the exact step we were on when speaking
-            setTimeout(() => {
-                handleTextSubmit(transcript);
-            }, 250);
+            // Final result only
+            if (event.results[0].isFinal) {
+                const transcript = event.results[0][0].transcript;
+                window.speechSynthesis.cancel(); // Safety kill
+                setInputValue('');
+                setIsListening(false);
+                setTimeout(() => handleTextSubmit(transcript), 250);
+            }
         };
 
         recognition.start();
