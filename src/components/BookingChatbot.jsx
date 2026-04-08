@@ -267,15 +267,15 @@ const BookingChatbot = () => {
             
             const voices = window.speechSynthesis.getVoices();
             
-            const mascNames = ['Google português do Brasil', 'Daniel', 'Guilherme', 'Felipe', 'Ricardo'];
+            const mascNames = ['Google português do Brasil', 'Daniel Natural', 'Guilherme', 'Felipe', 'Ricardo'];
             const ptVoice = voices.find(v => v.lang.includes('pt') && mascNames.some(name => v.name.includes(name))) ||
                             voices.find(v => v.lang.includes('pt-BR')) || 
                             voices.find(v => v.lang.startsWith('pt'));
 
             if (ptVoice) utterance.voice = ptVoice;
             utterance.lang = 'pt-BR';
-            utterance.rate = 1.05; // Slightly faster for natural communication
-            utterance.pitch = 1.05; // Improved clarity
+            utterance.rate = 1.0; // Professional, fluid pace
+            utterance.pitch = 0.9; // Deeper, more authoritative tone
 
             // Hands-free loop: trigger mic after bot finishes speaking
             utterance.onend = () => {
@@ -800,38 +800,49 @@ const BookingChatbot = () => {
                 {/* Input area (only for text steps) */}
                 {([STEPS.INTENT_SELECTION, STEPS.ASK_NAME, STEPS.ASK_PHONE, STEPS.ASK_PHONE_PLAN, STEPS.ASK_PHONE_PROMO].includes(step)) && !isTyping && (
                     <div className={`chatbot-input-area ${isVoiceModeRef.current ? 'voice-active' : ''}`}>
-                        <input
-                            ref={inputRef}
-                            type={step.includes('phone') ? 'tel' : 'text'}
-                            className="chatbot-input"
-                            placeholder={
-                                step === STEPS.INTENT_SELECTION 
-                                    ? 'Diga ou digite o que você precisa...'
-                                    : step === STEPS.ASK_NAME
-                                    ? 'Digite seu nome completo...'
-                                    : 'Ex: (11) 99999-9999'
-                            }
-                            value={inputValue}
-                            onChange={e => setInputValue(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleTextSubmit()}
-                            autoComplete="off"
-                            maxLength={step === STEPS.ASK_PHONE ? 20 : 60}
-                        />
+                        {isListening ? (
+                            <div className="listening-indicator">
+                                <div className="voice-wave">
+                                    <span /><span /><span /><span /><span />
+                                </div>
+                                Ouvindo você...
+                            </div>
+                        ) : (
+                            <>
+                                <input
+                                    ref={inputRef}
+                                    type={step.includes('phone') ? 'tel' : 'text'}
+                                    className="chatbot-input"
+                                    placeholder={
+                                        step === STEPS.INTENT_SELECTION 
+                                            ? 'Diga ou digite o que você precisa...'
+                                            : step === STEPS.ASK_NAME
+                                            ? 'Digite seu nome completo...'
+                                            : 'Ex: (11) 99999-9999'
+                                    }
+                                    value={inputValue}
+                                    onChange={e => setInputValue(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleTextSubmit()}
+                                    autoComplete="off"
+                                    maxLength={step === STEPS.ASK_PHONE ? 20 : 60}
+                                />
+                                <button
+                                    className="chatbot-send-btn"
+                                    onClick={handleTextSubmit}
+                                    disabled={!inputValue.trim()}
+                                    aria-label="Enviar"
+                                >
+                                    <SendIcon />
+                                </button>
+                            </>
+                        )}
                         <button
                             className={`chatbot-mic-btn ${isListening ? 'active' : ''}`}
-                            onClick={startListening}
-                            title="Falar por voz"
+                            onClick={isListening ? () => { if (recognitionRef.current) recognitionRef.current.stop(); } : startListening}
+                            title={isListening ? "Parar de ouvir" : "Falar por voz"}
                             type="button"
                         >
                             <MicIcon listening={isListening} />
-                        </button>
-                        <button
-                            className="chatbot-send-btn"
-                            onClick={handleTextSubmit}
-                            disabled={!inputValue.trim()}
-                            aria-label="Enviar"
-                        >
-                            <SendIcon />
                         </button>
                     </div>
                 )}
