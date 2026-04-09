@@ -228,10 +228,10 @@ const Home = () => {
                     </button>
                 </div>
 
-                <div className="home-gallery-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginTop: '12px' }}>
+                <div className="home-gallery-grid">
                     {siteData?.gallery?.slice(0, 4).map(img => (
-                        <div key={img.id} className="home-gallery-item glass-panel" onClick={() => navigate('/portifolio')} style={{ borderRadius: '12px', overflow: 'hidden', height: '140px' }}>
-                            <img src={img.image_url} alt="Corte" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <div key={img.id} className="home-gallery-item glass-panel" onClick={() => navigate('/portifolio')}>
+                            <img src={img.image_url} alt="Corte" />
                         </div>
                     ))}
                 </div>

@@ -269,10 +269,11 @@ const BookingChatbot = () => {
     }, [isOpen]);
 
     // ── Audio Engine ──────────────────────────────────────────────────────
+    const keepAliveRef = useRef(null); // Chrome TTS keep-alive timer
+
     const stripHTML = (html) => {
         const doc = new DOMParser().parseFromString(html, 'text/html');
         let text = doc.body.textContent || "";
-        // Remove high-frequency punctuation to keep speech natural
         return text.replace(/[!?.]{2,}/g, '.');
     };
 
@@ -280,6 +281,8 @@ const BookingChatbot = () => {
         if (recognitionRef.current) {
             try { 
                 recognitionRef.current.onend = null;
+                recognitionRef.current.onresult = null;
+                recognitionRef.current.onerror = null;
                 recognitionRef.current.abort(); 
             } catch(e) {}
         }
@@ -289,7 +292,9 @@ const BookingChatbot = () => {
     const startListening = (isBargeIn = false) => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) return;
-        if ((isListening || isProcessing) && !isBargeIn) return;
+        // Block if bot is currently talking or processing
+        if (isProcessing && !isBargeIn) return;
+        if (isListening && !isBargeIn) return;
 
         stopListening();
 
@@ -300,22 +305,44 @@ const BookingChatbot = () => {
         recognition.interimResults = true;
 
         recognition.onstart = () => setIsListening(true);
-        recognition.onend = () => setIsListening(false);
-        
-        recognition.onsoundstart = () => {
-            if (window.speechSynthesis.speaking) {
-                console.log("[Chatbot] Barge-in detected...");
-                window.speechSynthesis.cancel();
+        recognition.onend = () => {
+            setIsListening(false);
+            // Auto-restart if voice mode is still active and NOT processing
+            if (isVoiceModeRef.current && isOpenRef.current && !isProcessing) {
+                setTimeout(() => {
+                    if (isVoiceModeRef.current && isOpenRef.current && !window.speechSynthesis.speaking) {
+                        startListening();
+                    }
+                }, 500);
             }
         };
+
+        // NOTE: onsoundstart barge-in removed. It was canceling TTS on ambient noise.
+        // Barge-in only works via actual recognized speech (onresult handler).
 
         recognition.onresult = (event) => {
             if (event.results[0].isFinal) {
                 const transcript = event.results[0][0].transcript;
                 if (!transcript.trim()) return;
                 
+                // If bot is still talking, cancel the speech (user barge-in via actual words)
+                if (window.speechSynthesis.speaking) {
+                    console.log("[Chatbot] User barge-in via speech:", transcript.slice(0, 30));
+                    window.speechSynthesis.cancel();
+                    if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
+                    setIsProcessing(false);
+                }
+                
                 stopListening();
                 handleTextSubmit(transcript);
+            }
+        };
+
+        recognition.onerror = (event) => {
+            console.warn("[Chatbot STT Error]", event.error);
+            // Don't restart on 'aborted' — that's intentional
+            if (event.error !== 'aborted' && event.error !== 'no-speech') {
+                setIsListening(false);
             }
         };
 
@@ -330,6 +357,7 @@ const BookingChatbot = () => {
         // Ensure STT is OFF while bot starts speaking
         stopListening();
         window.speechSynthesis.cancel();
+        if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
         
         const cleanText = stripHTML(text);
         const utterance = new SpeechSynthesisUtterance(cleanText);
@@ -344,23 +372,48 @@ const BookingChatbot = () => {
 
         utterance.onstart = () => {
             setIsProcessing(true);
+            // Chrome Keep-Alive: without this, Chrome kills utterances > ~15s
+            keepAliveRef.current = setInterval(() => {
+                if (window.speechSynthesis.speaking) {
+                    window.speechSynthesis.pause();
+                    window.speechSynthesis.resume();
+                }
+            }, 10000);
         };
 
         utterance.onend = () => {
+            if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
             utteranceRef.current = null;
             setIsProcessing(false);
             // Resume listening only if voice mode is still active
-            if (isVoiceModeRef.current && isOpenRef.current && !isListening) {
-                // Short delay to avoid feedback
+            if (isVoiceModeRef.current && isOpenRef.current) {
                 setTimeout(() => {
                     startListening();
-                }, 300);
+                }, 400);
+            }
+        };
+
+        utterance.onerror = (event) => {
+            console.error("[Chatbot TTS Error]", event.error);
+            if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
+            utteranceRef.current = null;
+            setIsProcessing(false);
+            // Try to resume listening even if TTS fails
+            if (isVoiceModeRef.current && isOpenRef.current) {
+                setTimeout(() => startListening(), 400);
             }
         };
 
         utteranceRef.current = utterance;
         window.speechSynthesis.speak(utterance);
     };
+
+    // Clean up keep-alive on unmount
+    useEffect(() => {
+        return () => {
+            if (keepAliveRef.current) clearInterval(keepAliveRef.current);
+        };
+    }, []);
 
     const handleAudioToggle = () => {
         const nextState = !isAudioEnabled;
@@ -372,6 +425,7 @@ const BookingChatbot = () => {
             setIsVoiceMode(false);
             stopListening();
             window.speechSynthesis.cancel();
+            if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
         }
     };
 
@@ -750,12 +804,6 @@ const BookingChatbot = () => {
                             </button>
                         </div>
                     </div>
-                    {/* Step label inside header for better UX */}
-                    {[STEPS.ASK_NAME, STEPS.ASK_PHONE, STEPS.ASK_SERVICE, STEPS.ASK_BARBER, STEPS.ASK_DATE, STEPS.ASK_TIME].includes(step) && (
-                        <div className="chatbot-nav-step-label">
-                            Etapa {step === STEPS.ASK_NAME ? 1 : step === STEPS.ASK_PHONE ? 2 : step === STEPS.ASK_SERVICE ? 3 : step === STEPS.ASK_BARBER ? 4 : step === STEPS.ASK_DATE ? 5 : step === STEPS.ASK_TIME ? 6 : ''} de 6
-                        </div>
-                    )}
                 </div>
 
                 {/* Progress steps indicator - Only relevant for booking flow */}

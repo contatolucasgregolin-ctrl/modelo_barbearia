@@ -244,6 +244,19 @@
   border-radius: 50%;
   background: var(--color-success);
   box-shadow: 0 0 6px var(--color-success);
+  flex-shrink: 0;
+}
+.status-dot.pulse-dot {
+  animation: statusPulse 2s ease-in-out infinite;
+}
+.status-dot.offline {
+  background: #ef4444;
+  box-shadow: 0 0 6px #ef4444;
+  animation: none;
+}
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--color-success); }
+  50% { opacity: 0.4; box-shadow: 0 0 12px var(--color-success); }
 }
 
 /* Hide desktop nav (moved to sidebar) */
@@ -643,6 +656,17 @@
 }
 .bell-panel-header h4 { margin: 0; font-size: 0.9rem; font-weight: 700; }
 .bell-panel-content { max-height: 350px; overflow-y: auto; }
+
+@media (max-width: 480px) {
+  .admin-bell-panel {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90vw;
+    max-width: 400px;
+  }
+}
 .bell-empty {
   padding: 30px 16px;
   text-align: center;

@@ -168,9 +168,13 @@ const Admin = () => {
     const [activeAlert, setActiveAlert] = useState(null);
     const [realtimeStatus, setRealtimeStatus] = useState('connecting');
 
+    // Pre-load notification sound to avoid browser autoplay blocking
+    const notifAudioRef = useRef(null);
     useEffect(() => {
-        setUnreadCount(0);
-        setNotificationQueue([]);
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audio.volume = 0.8;
+        audio.preload = 'auto';
+        notifAudioRef.current = audio;
     }, []);
 
     // Navbar scroll state
@@ -324,91 +328,105 @@ const Admin = () => {
     }, [user, refreshAllDataImmediate]);
 
     // Supabase Real-time listener UNIFICADO
-    // Decouple from refreshAllData to avoid constant reconnects
+    // Use refs to decouple from render cycles and avoid stale closures
     const refreshRef = useRef(refreshAllData);
     useEffect(() => { refreshRef.current = refreshAllData; }, [refreshAllData]);
 
-    useEffect(() => {
-        if (!isAdmin) return;
+    const isAdminRef = useRef(isAdmin);
+    useEffect(() => { isAdminRef.current = isAdmin; }, [isAdmin]);
 
-        console.log("[Admin] 📡 Iniciando Master Realtime Channel");
+    // Stable notification dispatcher via ref (avoids stale closure in channel callbacks)
+    const showNotificationRef = useRef(null);
+    showNotificationRef.current = (notif) => {
+        console.log(`[Admin] 🔔 DISPARANDO NOTIFICAÇÃO @ ${new Date().toLocaleTimeString()}:`, notif.title);
         
-        const playNotificationSound = () => {
-            try {
-                const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-                audio.volume = 0.8;
-                const playPromise = audio.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(error => {
-                        console.warn("[Admin] Som bloqueado pelo navegador.");
-                    });
-                }
-            } catch(e) { console.warn("[Admin] Falha no áudio:", e); }
-        };
+        // Play sound from pre-loaded audio
+        try {
+            if (notifAudioRef.current) {
+                notifAudioRef.current.currentTime = 0;
+                const p = notifAudioRef.current.play();
+                if (p) p.catch(() => console.warn('[Admin] Som bloqueado pelo navegador — clique na página primeiro.'));
+            }
+        } catch(e) { console.warn('[Admin] Áudio erro:', e); }
+        
+        // Update notification queue + show central alert
+        setNotificationQueue(q => {
+            if (q.some(n => n.id === notif.id)) return q;
+            return [notif, ...q];
+        });
+        setUnreadCount(c => c + 1);
+        setActiveAlert(notif);
+    };
 
-        const showNotification = (notif) => {
-            console.log("[Admin] 🔔 DISPARANDO NOTIFICAÇÃO:", notif.title);
-            playNotificationSound();
-            
-            setNotificationQueue(q => {
-                if (q.some(n => n.id === notif.id)) return q;
-                setUnreadCount(c => c + 1);
-                setActiveAlert(notif);
-                return [notif, ...q];
-            });
-        };
+    useEffect(() => {
+        if (!isAdmin) {
+            console.log('[Admin Realtime] isAdmin=false, canal não será criado.');
+            return;
+        }
 
-        const masterChannel = supabase.channel('admin-master-sync')
-            .on('system', { event: '*' }, (payload) => {
-                console.log("[Admin Realtime] Status do Sistema:", payload);
-                if (payload.status) setRealtimeStatus(payload.status);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, payload => {
-                console.log("[Master Realtime] Evento Agendamento:", payload.eventType);
-                if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
-                    showNotification({ 
-                        id: `appt-${payload.new?.id || Date.now()}`, 
-                        title: '🔔 Novo Agendamento!', 
-                        message: `Um novo horário (${payload.new?.time?.slice(0,5)}) foi solicitado.`, 
-                        type: 'appointment' 
-                    });
-                }
+        const ts = () => new Date().toLocaleTimeString();
+        console.log(`[Admin] 📡 Iniciando Master Realtime Channel @ ${ts()}`);
+        
+        const masterChannel = supabase.channel('admin-master-realtime-v2', {
+            config: { broadcast: { self: true } }
+        })
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' }, payload => {
+                console.log(`[Realtime ${ts()}] ✅ INSERT appointments:`, payload.new?.id);
+                showNotificationRef.current({ 
+                    id: `appt-${payload.new?.id || Date.now()}`, 
+                    title: '🔔 Novo Agendamento!', 
+                    message: `Um novo horário (${payload.new?.time?.slice(0,5) || '??:??'}) foi solicitado.`, 
+                    type: 'appointment' 
+                });
                 refreshRef.current('appointments');
             })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_subscriptions' }, payload => {
-                console.log("[Master Realtime] Evento Planos:", payload.eventType);
-                if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'active')) {
-                    showNotification({ 
-                        id: `sub-${payload.new?.id || Date.now()}`, 
-                        title: '⭐ Nova Assinatura!', 
-                        message: 'Um cliente acaba de aderir ao seu Clube!', 
-                        type: 'subscription' 
-                    });
-                }
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'appointments' }, payload => {
+                console.log(`[Realtime ${ts()}] 🔄 UPDATE appointments:`, payload.new?.id, payload.new?.status);
+                refreshRef.current('appointments');
+            })
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plan_subscriptions' }, payload => {
+                console.log(`[Realtime ${ts()}] ✅ INSERT plan_subscriptions:`, payload.new?.id);
+                showNotificationRef.current({ 
+                    id: `sub-${payload.new?.id || Date.now()}`, 
+                    title: '⭐ Nova Assinatura!', 
+                    message: 'Um cliente acaba de aderir ao seu Clube!', 
+                    type: 'subscription' 
+                });
                 refreshRef.current('subscriptions');
             })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'promotion_interests' }, payload => {
-                console.log("[Master Realtime] Evento Promoções:", payload.eventType);
-                if (payload.eventType === 'INSERT') {
-                    showNotification({ 
-                        id: `promo-${payload.new?.id || Date.now()}`, 
-                        title: '🎁 Novo Interesse!', 
-                        message: 'Temos um novo cliente interessado em promoções!', 
-                        type: 'promo_interest' 
-                    });
-                }
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'promotion_interests' }, payload => {
+                console.log(`[Realtime ${ts()}] ✅ INSERT promotion_interests:`, payload.new?.id);
+                showNotificationRef.current({ 
+                    id: `promo-${payload.new?.id || Date.now()}`, 
+                    title: '🎁 Novo Interesse!', 
+                    message: 'Temos um novo cliente interessado em promoções!', 
+                    type: 'promo_interest' 
+                });
                 refreshRef.current('interests');
             })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_subscriptions' }, payload => {
+                if (payload.eventType === 'UPDATE') refreshRef.current('subscriptions');
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'promotion_interests' }, payload => {
+                if (payload.eventType === 'UPDATE') refreshRef.current('interests');
+            })
             .subscribe((status, err) => {
-                console.log(`[Admin Realtime] Status da Inscrição: ${status}`, err || '');
+                console.log(`[Admin Realtime ${ts()}] Status: ${status}`, err ? `Erro: ${err.message}` : '✅');
                 setRealtimeStatus(status);
+                
+                if (status === 'CHANNEL_ERROR') {
+                    console.error('[Admin Realtime] ❌ Canal com erro. Tentando reconectar em 5s...');
+                    setTimeout(() => {
+                        supabase.removeChannel(masterChannel);
+                    }, 5000);
+                }
             });
 
         return () => {
-            console.log("[Admin] Removendo Master Realtime Channel");
+            console.log(`[Admin] Removendo Master Realtime Channel @ ${ts()}`);
             supabase.removeChannel(masterChannel);
         };
-    }, [isAdmin]); // Only rerun if admin status changes
+    }, [isAdmin]);
 
     // Auto-dismiss notification after 8 seconds
     useEffect(() => {
