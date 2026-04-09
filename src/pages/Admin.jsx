@@ -255,7 +255,7 @@ const Admin = () => {
                     return result.data || [];
                 } catch (err) {
                     console.error(`[Admin] Falha em ${description}:`, err.message);
-                    return []; // Retorna array vazio para não quebrar o Promise.all
+                    throw err; // Propaga para o catch principal para não limpar o cache com arrays vazios
                 }
             };
 

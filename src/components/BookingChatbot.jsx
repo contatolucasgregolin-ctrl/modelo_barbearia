@@ -269,7 +269,6 @@ const BookingChatbot = () => {
     }, [isOpen]);
 
     // ── Audio Engine ──────────────────────────────────────────────────────
-    const keepAliveRef = useRef(null); // Chrome TTS keep-alive timer
 
     const stripHTML = (html) => {
         const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -329,7 +328,6 @@ const BookingChatbot = () => {
                 if (window.speechSynthesis.speaking) {
                     console.log("[Chatbot] User barge-in via speech:", transcript.slice(0, 30));
                     window.speechSynthesis.cancel();
-                    if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
                     setIsProcessing(false);
                 }
                 
@@ -357,7 +355,6 @@ const BookingChatbot = () => {
         // Ensure STT is OFF while bot starts speaking
         stopListening();
         window.speechSynthesis.cancel();
-        if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
         
         const cleanText = stripHTML(text);
         const utterance = new SpeechSynthesisUtterance(cleanText);
@@ -372,17 +369,9 @@ const BookingChatbot = () => {
 
         utterance.onstart = () => {
             setIsProcessing(true);
-            // Chrome Keep-Alive: without this, Chrome kills utterances > ~15s
-            keepAliveRef.current = setInterval(() => {
-                if (window.speechSynthesis.speaking) {
-                    window.speechSynthesis.pause();
-                    window.speechSynthesis.resume();
-                }
-            }, 10000);
         };
 
         utterance.onend = () => {
-            if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
             utteranceRef.current = null;
             setIsProcessing(false);
             // Resume listening only if voice mode is still active
@@ -395,7 +384,6 @@ const BookingChatbot = () => {
 
         utterance.onerror = (event) => {
             console.error("[Chatbot TTS Error]", event.error);
-            if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
             utteranceRef.current = null;
             setIsProcessing(false);
             // Try to resume listening even if TTS fails
@@ -408,13 +396,6 @@ const BookingChatbot = () => {
         window.speechSynthesis.speak(utterance);
     };
 
-    // Clean up keep-alive on unmount
-    useEffect(() => {
-        return () => {
-            if (keepAliveRef.current) clearInterval(keepAliveRef.current);
-        };
-    }, []);
-
     const handleAudioToggle = () => {
         const nextState = !isAudioEnabled;
         setIsAudioEnabled(nextState);
@@ -425,7 +406,6 @@ const BookingChatbot = () => {
             setIsVoiceMode(false);
             stopListening();
             window.speechSynthesis.cancel();
-            if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
         }
     };
 
@@ -446,6 +426,62 @@ const BookingChatbot = () => {
 
     const userSay = (text) => {
         setMessages(prev => [...prev, { from: 'user', text }]);
+    };
+
+    // ── NLP for Date & Time ───────────────────────────────────────────────
+    const parseVoiceDate = (text) => {
+        const lower = text.toLowerCase();
+        const now = new Date();
+        
+        if (lower.includes('hoje')) return getTodayStr();
+        if (lower.includes('amanhã') && !lower.includes('depois')) {
+            const tmr = new Date(); tmr.setDate(now.getDate() + 1);
+            return YYYYMMDD(tmr);
+        }
+        if (lower.includes('depois de amanhã')) {
+            const tmr = new Date(); tmr.setDate(now.getDate() + 2);
+            return YYYYMMDD(tmr);
+        }
+
+        const matchDia = lower.match(/(?:dia)\s+(\d{1,2})/);
+        if (matchDia) {
+            const day = parseInt(matchDia[1], 10);
+            if (day >= 1 && day <= 31) {
+                const target = new Date(now.getFullYear(), now.getMonth(), day);
+                if (target < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+                    target.setMonth(target.getMonth() + 1);
+                }
+                return YYYYMMDD(target);
+            }
+        }
+        return null;
+    };
+
+    const YYYYMMDD = (d) => {
+        const offset = d.getTimezoneOffset();
+        const adjusted = new Date(d.getTime() - (offset*60*1000));
+        return adjusted.toISOString().split('T')[0];
+    };
+
+    const parseVoiceTime = (text) => {
+        const lower = text.toLowerCase();
+        // match something like: as 14, 2 horas, duas da tarde, etc.
+        const matchNum = lower.match(/(?:às|as|as?)\s+(\d{1,2})|(\d{1,2})\s*(?:horas|horas?)/);
+        if (matchNum) {
+            let hour = parseInt(matchNum[1] || matchNum[2], 10);
+            const isMeia = lower.includes('meia');
+            const isTarde = lower.includes('tarde') || lower.includes('noite');
+            
+            if (hour < 12 && isTarde) hour += 12;
+            else if (hour === 12 && lower.includes('meio dia')) hour = 12;
+            
+            if (hour >= 0 && hour <= 23) {
+                const hh = hour.toString().padStart(2, '0');
+                const mm = isMeia ? '30' : '00';
+                return `${hh}:${mm}`;
+            }
+        }
+        return null;
     };
 
     // ── Handle text input submission ──────────────────────────────────────
@@ -498,6 +534,38 @@ const BookingChatbot = () => {
                 `Perfeito! Agora, qual desses <strong>serviços</strong> você gostaria de agendar hoje?`,
                 STEPS.ASK_SERVICE
             );
+            return;
+        }
+
+        if (currentStep === STEPS.ASK_SERVICE) {
+            botSay(`Para escolher o serviço, por favor selecione uma das opções na lista.`, STEPS.ASK_SERVICE);
+            return;
+        }
+
+        if (currentStep === STEPS.ASK_BARBER) {
+            botSay(`Para escolher o profissional, por favor selecione uma das opções na tela.`, STEPS.ASK_BARBER);
+            return;
+        }
+
+        if (currentStep === STEPS.ASK_DATE) {
+            const parsedDate = parseVoiceDate(val);
+            if (parsedDate) {
+                handleDateSelect(parsedDate);
+            } else {
+                userSay(val);
+                botSay(`Não consegui entender a data exata. Você poderia dizer "hoje", "amanhã" ou "dia 15", ou então selecionar diretamente no calendário da tela?`, STEPS.ASK_DATE);
+            }
+            return;
+        }
+
+        if (currentStep === STEPS.ASK_TIME) {
+            const parsedTime = parseVoiceTime(val);
+            if (parsedTime) {
+                handleTimeSelect(parsedTime);
+            } else {
+                userSay(val);
+                botSay(`Não consegui entender o horário. Você poderia dizer "às 14", "duas da tarde", ou então clicar no horário desejado na tela?`, STEPS.ASK_TIME);
+            }
             return;
         }
 
