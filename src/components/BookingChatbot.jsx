@@ -309,7 +309,7 @@ const BookingChatbot = () => {
             // Auto-restart if voice mode is still active and NOT processing
             if (isVoiceModeRef.current && isOpenRef.current && !isProcessing) {
                 setTimeout(() => {
-                    if (isVoiceModeRef.current && isOpenRef.current && !window.speechSynthesis.speaking) {
+                    if (isVoiceModeRef.current && isOpenRef.current && (!window.speechSynthesis || !window.speechSynthesis.speaking)) {
                         startListening();
                     }
                 }, 500);
@@ -325,7 +325,7 @@ const BookingChatbot = () => {
                 if (!transcript.trim()) return;
                 
                 // If bot is still talking, cancel the speech (user barge-in via actual words)
-                if (window.speechSynthesis.speaking) {
+                if (window.speechSynthesis && window.speechSynthesis.speaking) {
                     console.log("[Chatbot] User barge-in via speech:", transcript.slice(0, 30));
                     window.speechSynthesis.cancel();
                     setIsProcessing(false);
@@ -350,7 +350,7 @@ const BookingChatbot = () => {
     };
 
     const speakText = (text) => {
-        if (!isAudioEnabled) return;
+        if (!isAudioEnabled || !window.speechSynthesis) return;
         
         // Ensure STT is OFF while bot starts speaking
         stopListening();
@@ -405,7 +405,7 @@ const BookingChatbot = () => {
         } else {
             setIsVoiceMode(false);
             stopListening();
-            window.speechSynthesis.cancel();
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
         }
     };
 
@@ -635,7 +635,7 @@ const BookingChatbot = () => {
         if (stepHistory.length === 0) return;
         
         // Stop any current speech or listening
-        window.speechSynthesis.cancel();
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
         stopListening();
         setIsProcessing(false);
 

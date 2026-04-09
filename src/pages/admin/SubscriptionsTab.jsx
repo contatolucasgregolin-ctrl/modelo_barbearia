@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { myConfirm } from '../../lib/utils';
 import { StatusBadge, Modal } from '../Admin';
 import {
-    Plus, Trash2, Save, Pencil, X, Check, RefreshCw, Eye, User
+    Plus, Trash2, Save, Pencil, X, Check, RefreshCw, Eye, User, TrendingUp
 } from 'lucide-react';
 import MiniTutorial from '../../components/MiniTutorial';
 import Swal from 'sweetalert2';
@@ -206,12 +206,12 @@ const SubscriptionsTab = ({ cachedData, refreshAll }) => {
             if (!(await myConfirm(`Tem certeza que deseja excluir ${selectedIds.length} assinatura(s)?`))) return;
             const { error } = await supabase.from('plan_subscriptions').delete().in('id', selectedIds);
             if (error) alert('Erro ao excluir algumas assinaturas.');
-            setSubscriptions(prev => prev.filter(s => !selectedIds.includes(s.id)));
+            refreshAll();
         } else {
             if (!(await myConfirm(`Tem certeza que deseja alterar o status de ${selectedIds.length} assinatura(s) para '${bulkAction}'?`))) return;
             const { error } = await supabase.from('plan_subscriptions').update({ status: bulkAction }).in('id', selectedIds);
             if (error) alert('Erro ao atualizar algumas assinaturas.');
-            setSubscriptions(prev => prev.map(s => selectedIds.includes(s.id) ? { ...s, status: bulkAction } : s));
+            refreshAll();
         }
 
         setSelectedIds([]);
