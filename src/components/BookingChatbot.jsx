@@ -107,6 +107,21 @@ const getTodayStr = () => {
 
 const validatePhone = (p) => p.replace(/\D/g, '').length >= 10;
 
+const normalizeBRPhone = (text) => {
+    if (!text) return "";
+    // Extract only digits to handle spoken numbers like "onze nove..."
+    const digits = text.replace(/\D/g, '');
+    if (digits.length === 0) return "";
+    
+    // Standard BR formatting
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    // Limit to 11 digits (DDD + 9 digits)
+    const d = digits.slice(0, 11);
+    return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7, 11)}`;
+};
+
 // ─── MESSAGE BUBBLE ───────────────────────────────────────────────────────────
 const MessageBubble = ({ msg }) => (
     <div className={`chatbot-message ${msg.from}`}>
@@ -151,6 +166,7 @@ const BookingChatbot = () => {
     const [selectedTime, setSelectedTime]       = useState('');
     const [bookedTimes, setBookedTimes]         = useState([]);
     const [isSubmitting, setIsSubmitting]       = useState(false);
+    const [isProcessing, setIsProcessing]       = useState(false);
 
     const messagesEndRef = useRef(null);
     const inputRef       = useRef(null);
@@ -189,14 +205,22 @@ const BookingChatbot = () => {
     // Fallback load if context is empty
     useEffect(() => {
         const loadFallback = async () => {
-            if (services.length > 0) return;
-            const { data: sData } = await supabase.from('services').select('*').order('name');
-            if (sData) setServices(sData);
-            const { data: aData } = await supabase.from('artists').select('*').eq('active', true).order('name');
-            if (aData) setBarbers(aData);
+            if (services.length > 0 && barbers.length > 0) return;
+            try {
+                if (services.length === 0) {
+                    const { data: sData } = await supabase.from('services').select('*').order('name');
+                    if (sData) setServices(sData);
+                }
+                if (barbers.length === 0) {
+                    const { data: bData } = await supabase.from('artists').select('*').eq('active', true).order('name');
+                    if (bData) setBarbers(bData);
+                }
+            } catch (err) {
+                console.error("Error loading fallback data:", err);
+            }
         };
         loadFallback();
-    }, [services.length]);
+    }, [services.length, barbers.length]);
 
     // ── Voice Initialization ──────────────────────────────────────────────
     useEffect(() => {
@@ -248,125 +272,107 @@ const BookingChatbot = () => {
     const stripHTML = (html) => {
         const doc = new DOMParser().parseFromString(html, 'text/html');
         let text = doc.body.textContent || "";
-        // Remove common emojis and symbols to keep speech objective
-        return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
+        // Remove high-frequency punctuation to keep speech natural
+        return text.replace(/[!?.]{2,}/g, '.');
     };
 
-    const speakText = (text, delay = 0) => {
-        if (!isAudioEnabled || !window.speechSynthesis) return;
+    const stopListening = () => {
+        if (recognitionRef.current) {
+            try { 
+                recognitionRef.current.onend = null;
+                recognitionRef.current.abort(); 
+            } catch(e) {}
+        }
+        setIsListening(false);
+    };
 
-        setTimeout(() => {
-            window.speechSynthesis.cancel();
-            
-            if (window.speechSynthesis.paused) {
-                window.speechSynthesis.resume();
+    const startListening = (isBargeIn = false) => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) return;
+        if ((isListening || isProcessing) && !isBargeIn) return;
+
+        stopListening();
+
+        const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.lang = 'pt-BR';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+
+        recognition.onstart = () => setIsListening(true);
+        recognition.onend = () => setIsListening(false);
+        
+        recognition.onsoundstart = () => {
+            if (window.speechSynthesis.speaking) {
+                console.log("[Chatbot] Barge-in detected...");
+                window.speechSynthesis.cancel();
             }
+        };
 
-            const plainText = stripHTML(text);
-            const utterance = new SpeechSynthesisUtterance(plainText);
-            utteranceRef.current = utterance; 
-            
-            const voices = window.speechSynthesis.getVoices();
-            const mascNames = ['Google português do Brasil', 'Daniel Natural', 'Guilherme', 'Felipe', 'Ricardo'];
-            const ptVoice = voices.find(v => v.lang.includes('pt') && mascNames.some(name => v.name.includes(name))) ||
-                            voices.find(v => v.lang.includes('pt-BR')) || 
-                            voices.find(v => v.lang.startsWith('pt'));
+        recognition.onresult = (event) => {
+            if (event.results[0].isFinal) {
+                const transcript = event.results[0][0].transcript;
+                if (!transcript.trim()) return;
+                
+                stopListening();
+                handleTextSubmit(transcript);
+            }
+        };
 
-            if (ptVoice) utterance.voice = ptVoice;
-            utterance.lang = 'pt-BR';
-            utterance.rate = 1.0; 
-            utterance.pitch = 0.9; 
+        try { recognition.start(); } catch(e) {
+            console.error("Recognition start error:", e);
+        }
+    };
 
-            utterance.onstart = () => {
-                // BARGE-IN: Start listening slightly after bot starts speaking
-                // This allows the user to interrupt the bot
-                if (isVoiceModeRef.current && isOpenRef.current) {
-                    setTimeout(() => {
-                        if (window.speechSynthesis.speaking && isVoiceModeRef.current) {
-                            console.log("[Chatbot] Parallel listening activated for barge-in...");
-                            startListening(true); // true = barge-in mode
-                        }
-                    }, 1200); // 1.2s grace period to avoid bot hearing its own first words
-                }
-            };
+    const speakText = (text) => {
+        if (!isAudioEnabled) return;
+        
+        // Ensure STT is OFF while bot starts speaking
+        stopListening();
+        window.speechSynthesis.cancel();
+        
+        const cleanText = stripHTML(text);
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        
+        const voices = window.speechSynthesis.getVoices();
+        const ptVoice = voices.find(v => v.lang.startsWith('pt-BR') && (v.name.includes('Google') || v.name.includes('Daniel') || v.name.includes('Masculine')));
+        if (ptVoice) utterance.voice = ptVoice;
+        
+        utterance.rate = 1.05;
+        utterance.pitch = 1;
+        utterance.volume = 1;
 
-            utterance.onend = () => {
-                // If bot finished naturally (not interrupted), ensure mic is on
-                if (isVoiceModeRef.current && isOpenRef.current && !isListening) {
-                    console.log("[Chatbot] Bot finished speaking, ensuring mic is on...");
+        utterance.onstart = () => {
+            setIsProcessing(true);
+        };
+
+        utterance.onend = () => {
+            utteranceRef.current = null;
+            setIsProcessing(false);
+            // Resume listening only if voice mode is still active
+            if (isVoiceModeRef.current && isOpenRef.current && !isListening) {
+                // Short delay to avoid feedback
+                setTimeout(() => {
                     startListening();
-                }
-            };
+                }, 300);
+            }
+        };
 
-            window.speechSynthesis.speak(utterance);
-        }, delay);
+        utteranceRef.current = utterance;
+        window.speechSynthesis.speak(utterance);
     };
 
     const handleAudioToggle = () => {
         const nextState = !isAudioEnabled;
         setIsAudioEnabled(nextState);
         if (nextState) {
-            setIsVoiceMode(true); // Automatically enable voice loop if speaker is on
-            speakText("Modo de voz e escuta automática ativados.", 100);
+            setIsVoiceMode(true);
+            speakText("Modo de voz ativado.");
         } else {
             setIsVoiceMode(false);
+            stopListening();
             window.speechSynthesis.cancel();
-            if (recognitionRef.current) recognitionRef.current.stop();
         }
-    };
-
-    // ── Speech Recognition (STT) ──────────────────────────────────────────
-    const startListening = (isBargeIn = false) => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return;
-
-        // If already listening, don't start again
-        if (isListening && !isBargeIn) return;
-
-        if (recognitionRef.current) {
-            try { recognitionRef.current.stop(); } catch(e) {}
-        }
-
-        setIsVoiceMode(true);
-        const recognition = new SpeechRecognition();
-        recognitionRef.current = recognition;
-        
-        recognition.lang = 'pt-BR';
-        recognition.continuous = false;
-        recognition.interimResults = true; // Faster detection
-
-        recognition.onstart = () => setIsListening(true);
-        
-        // INTERRUPT LOGIC: When sound is detected, stop bot immediately
-        recognition.onsoundstart = () => {
-            if (window.speechSynthesis.speaking) {
-                console.log("[Chatbot] Barge-in! Audio detected, killing bot speech.");
-                window.speechSynthesis.cancel();
-            }
-        };
-
-        recognition.onend = () => {
-            setIsListening(false);
-            recognitionRef.current = null;
-        };
-        
-        recognition.onerror = () => {
-            setIsListening(false);
-            recognitionRef.current = null;
-        };
-
-        recognition.onresult = (event) => {
-            // Final result only
-            if (event.results[0].isFinal) {
-                const transcript = event.results[0][0].transcript;
-                window.speechSynthesis.cancel(); // Safety kill
-                setInputValue('');
-                setIsListening(false);
-                setTimeout(() => handleTextSubmit(transcript), 250);
-            }
-        };
-
-        recognition.start();
     };
 
     // ── Bot message helper ────────────────────────────────────────────────
@@ -375,13 +381,13 @@ const BookingChatbot = () => {
         setTimeout(() => {
             setIsTyping(false);
             setMessages(prev => [...prev, { from: 'bot', text }]);
-            speakText(text); // Trigger audio
+            speakText(text);
             if (nextStep) {
                 setStepHistory(prev => [...prev, stepRef.current]);
                 setStep(nextStep);
-                stepRef.current = nextStep; // synchronous update
+                stepRef.current = nextStep;
             }
-        }, 400); // Reduced delay for snappier conversation
+        }, 400);
     };
 
     const userSay = (text) => {
@@ -394,10 +400,8 @@ const BookingChatbot = () => {
         const val = rawVal.trim();
         if (!val) return;
         
-        // Always reset input when submitting, especially when coming from voice (overrideVal)
         setInputValue('');
-
-        const currentStep = stepRef.current; // GUARANTEED LATEST STATE
+        const currentStep = stepRef.current;
 
         if (currentStep === STEPS.INTENT_SELECTION) {
             userSay(val);
@@ -428,13 +432,14 @@ const BookingChatbot = () => {
         }
 
         if (currentStep === STEPS.ASK_PHONE) {
-            if (!validatePhone(val)) {
+            const formatted = normalizeBRPhone(val);
+            if (formatted.replace(/\D/g, '').length < 10) {
                 userSay(val);
-                botSay(`Hmm, esse número parece estar muito curto. Pode me dizer com o DDD de novo, por favor?`);
+                botSay(`Hmm, esse número parece estar incompleto. Pode me dizer com o DDD completo, por favor?`);
                 return;
             }
-            userSay(val);
-            setClientPhone(val);
+            userSay(formatted);
+            setClientPhone(formatted);
             botSay(
                 `Perfeito! Agora, qual desses <strong>serviços</strong> você gostaria de agendar hoje?`,
                 STEPS.ASK_SERVICE
@@ -443,31 +448,29 @@ const BookingChatbot = () => {
         }
 
         if (currentStep === STEPS.ASK_PHONE_PLAN || currentStep === STEPS.ASK_PHONE_PROMO) {
-            if (!validatePhone(val)) {
+            const formatted = normalizeBRPhone(val);
+            if (formatted.replace(/\D/g, '').length < 10) {
                 userSay(val);
-                botSay(`Esse número me pareceu incompleto. Me diga seu WhatsApp com o DDD e o número completo, por favor?`);
+                botSay(`Esse número parece curto demais. Poderia dizer com o DDD?`);
                 return;
             }
-            userSay(val);
-            setClientPhone(val);
-            const topic = currentStep === STEPS.ASK_PHONE_PLAN ? "Planos" : "Promoções";
+            userSay(formatted);
             
-            // PERSISTENCE: Save interest to database so it triggers Admin Notification
+            const topic = currentStep === STEPS.ASK_PHONE_PROMO ? 'Promoções' : 'Planos de Assinatura';
+
             const persistInterest = async () => {
                 try {
-                    // 1. Get/Create Customer
                     let customerId = null;
-                    const { data: existing } = await supabase.from('customers').select('id').eq('phone', val).maybeSingle();
+                    const { data: existing } = await supabase.from('customers').select('id').eq('phone', formatted).maybeSingle();
                     if (existing) {
                         customerId = existing.id;
                     } else {
-                        const { data: newCust } = await supabase.from('customers').insert([{ name: clientName || 'Interessado Chatbot', phone: val }]).select('id').single();
+                        const { data: newCust } = await supabase.from('customers').insert([{ name: clientName || 'Interessado Chatbot', phone: formatted }]).select('id').single();
                         if (newCust) customerId = newCust.id;
                     }
 
                     if (!customerId) return;
 
-                    // 2. Insert into Interest Table
                     if (currentStep === STEPS.ASK_PHONE_PROMO) {
                         const { data: firstPromo } = await supabase.from('promotions').select('id').eq('active', true).limit(1).maybeSingle();
                         if (firstPromo) {
@@ -498,7 +501,6 @@ const BookingChatbot = () => {
 
             botSay(`Fechado! O time já foi avisado. Em breve, enviaremos todas as novidades sobre ${topic} direto no seu celular!`, STEPS.DONE);
             
-            // Redirect to whatsapp
             const phone = (siteData?.contact?.whatsapp || '').replace(/\D/g, '');
             let msg = `Olá, estava usando o Assistente Virtual e gostaria de saber os detalhes comerciais sobre *${topic}*!`;
             if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
@@ -509,30 +511,33 @@ const BookingChatbot = () => {
     // ── Navigation ────────────────────────────────────────────────────────
     const handleBack = () => {
         if (stepHistory.length === 0) return;
+        
+        // Stop any current speech or listening
+        window.speechSynthesis.cancel();
+        stopListening();
+        setIsProcessing(false);
+
         const newHistory = [...stepHistory];
         const prevStep = newHistory.pop();
         setStepHistory(newHistory);
         
-        // Reset specific states before returning to the previous UI
         if (step === STEPS.ASK_TIME) setSelectedTime('');
         if (step === STEPS.ASK_DATE) setSelectedDate('');
         if (step === STEPS.ASK_BARBER) setSelectedBarber(null);
         if (step === STEPS.ASK_SERVICE) setSelectedService(null);
-        if (step === STEPS.ASK_PHONE) {
-            setClientPhone('');
-            // Optional: Bot needs to re-ask for phone
-        }
+        if (step === STEPS.ASK_PHONE) setClientPhone('');
         if (step === STEPS.ASK_NAME) setClientName('');
         
         setStep(prevStep);
         stepRef.current = prevStep;
         
-        // Brief message to acknowledge navigation
         setIsTyping(true);
         setTimeout(() => {
             setIsTyping(false);
-            setMessages(prev => [...prev, { from: 'bot', text: "Sem problemas, vamos alterar essa informação. Qual você prefere agora?" }]);
-        }, 300);
+            const backMsg = "Entendido! Vamos voltar um passo.";
+            setMessages(prev => [...prev, { from: 'bot', text: backMsg }]);
+            speakText(backMsg);
+        }, 150);
     };
 
     // ── Handle service selection ──────────────────────────────────────────
@@ -558,18 +563,14 @@ const BookingChatbot = () => {
     // ── Handle date selection ─────────────────────────────────────────────
     const handleDateSelect = async (date) => {
         const dayInfo = getDayInfo(date);
-        
-        // 1. Basic Day Closure Check (e.g. Sundays)
         if (dayInfo?.closed) {
             setSelectedDate(date);
             botSay(`Olha, infelizmente não atendemos aos domingos. Você teria outro dia de preferência?`);
             return;
         }
 
-        setIsTyping(true); // Visual indicator while checking database
-
+        setIsTyping(true);
         try {
-            // 2. Proactive Availability Check (Anticipate ASK_TIME results)
             const { data: booked } = await supabase
                 .from('appointments').select('time')
                 .eq('date', date)
@@ -577,12 +578,10 @@ const BookingChatbot = () => {
                 .in('status', ['pending', 'confirmed', 'finished']);
 
             const bookedTimesOnDate = booked ? booked.map(a => (a.time || '').slice(0, 5)) : [];
-            
             const todayStr = getTodayStr();
             const now = new Date();
             const nowHour = now.getHours() + (now.getMinutes() / 60);
             
-            // Filter ALL_SLOTS just like getAvailableSlots() does but locally first
             const availableSlots = ALL_SLOTS.filter(time => {
                 const [h, min] = time.split(':').map(Number);
                 const slotHour = h + (min / 60);
@@ -593,26 +592,17 @@ const BookingChatbot = () => {
             });
 
             setIsTyping(false);
-
             if (availableSlots.length === 0) {
-                // Inform user and STAY on ASK_DATE
-                botSay(`Poxa, para o dia <strong>${formatDate(date)}</strong> a agenda do profissional <strong>${selectedBarber.name}</strong> já está lotada ou não há mais horários disponíveis.<br/><br/>Você poderia escolher <strong>outra data</strong>, por favor?`);
+                botSay(`Poxa, para o dia <strong>${formatDate(date)}</strong> a agenda do profissional <strong>${selectedBarber.name}</strong> já está lotada. Você poderia escolher <strong>outra data</strong>?`);
                 return;
             }
 
-            // 3. Proceed only if slots exist
             userSay(`📅 ${formatDate(date)}`);
             setSelectedDate(date);
-            setBookedTimes(bookedTimesOnDate); // Pre-fill to avoid UI flicker
-            botSay(
-                `Data anotada! E qual seria o melhor <strong>horário</strong> para você?`,
-                STEPS.ASK_TIME
-            );
-
+            setBookedTimes(bookedTimesOnDate);
+            botSay(`Data anotada! E qual seria o melhor <strong>horário</strong> para você?`, STEPS.ASK_TIME);
         } catch (error) {
-            console.error("[Availability Check Error]", error);
             setIsTyping(false);
-            // Safety fallback: allow transition but UI buttons will still be disabled naturally
             userSay(`📅 ${formatDate(date)}`);
             setSelectedDate(date);
             botSay(`Certo! Vamos conferir os horários disponíveis para esse dia:`, STEPS.ASK_TIME);
@@ -623,14 +613,14 @@ const BookingChatbot = () => {
     const handleTimeSelect = (time) => {
         userSay(`⏰ ${time}`);
         setSelectedTime(time);
-
         const summary = `
-            👤 ${clientName}<br/>
-            📱 ${clientPhone}<br/>
-            ✂️ ${selectedService?.name}<br/>
-            💈 ${selectedBarber?.name}<br/>
-            📅 ${formatDate(selectedDate)} às ${time}<br/><br/>
-            <strong>Tudo certo! Podemos confirmar o seu agendamento agora?</strong>
+            <strong>Resumo do Agendamento:</strong><br/><br/>
+            👤 <strong>Cliente:</strong> ${clientName}<br/>
+            📱 <strong>WhatsApp:</strong> ${clientPhone}<br/>
+            ✂️ <strong>Serviço:</strong> ${selectedService?.name} (R$ ${selectedService?.price})<br/>
+            💈 <strong>Profissional:</strong> ${selectedBarber?.name}<br/>
+            📅 <strong>Data:</strong> ${formatDate(selectedDate)} às ${time}<br/><br/>
+            <strong>Tudo certo! Podemos confirmar agora?</strong>
         `;
         botSay(summary, STEPS.CONFIRM);
     };
@@ -639,27 +629,17 @@ const BookingChatbot = () => {
     const handleConfirm = async () => {
         setIsSubmitting(true);
         userSay('✅ Sim, confirmar!');
-
         try {
-            // 1. Upsert customer
             let customerId = null;
-            const { data: existing } = await supabase
-                .from('customers').select('id')
-                .eq('phone', clientPhone).maybeSingle();
-
+            const { data: existing } = await supabase.from('customers').select('id').eq('phone', clientPhone).maybeSingle();
             if (existing) {
                 customerId = existing.id;
             } else {
-                const { data: newCust, error: custErr } = await supabase
-                    .from('customers')
-                    .insert([{ name: clientName, phone: clientPhone }])
-                    .select('id').single();
-                if (custErr) throw custErr;
+                const { data: newCust } = await supabase.from('customers').insert([{ name: clientName, phone: clientPhone }]).select('id').single();
                 customerId = newCust.id;
             }
 
-            // 2. Insert appointment
-            const { error: appErr } = await supabase.from('appointments').insert([{
+            await supabase.from('appointments').insert([{
                 customer_id: customerId,
                 artist_id: selectedBarber.id,
                 service_id: selectedService.id,
@@ -668,42 +648,32 @@ const BookingChatbot = () => {
                 session_price: selectedService.price,
                 status: 'pending',
             }]);
-            if (appErr) throw appErr;
 
-            // 3. Build WhatsApp message
             const phone = (siteData?.contact?.whatsapp || '').replace(/\D/g, '');
-            let msg = `*Novo Agendamento* ✂️\n`;
-            msg += `----------------------------\n`;
-            msg += `*Cliente:* ${clientName}\n`;
-            msg += `*WhatsApp:* ${clientPhone}\n`;
-            msg += `----------------------------\n`;
-            msg += `*Serviço:* ${selectedService.name} (R$ ${selectedService.price})\n`;
-            msg += `*Profissional:* ${selectedBarber.name}\n`;
-            msg += `*Data:* ${formatDate(selectedDate)}\n`;
-            msg += `*Horário:* ${selectedTime}\n`;
+            let whatsappMsg = `*Novo Agendamento* ✂️\n`;
+            whatsappMsg += `----------------------------\n`;
+            whatsappMsg += `*Cliente:* ${clientName}\n`;
+            whatsappMsg += `*WhatsApp:* ${clientPhone}\n`;
+            whatsappMsg += `----------------------------\n`;
+            whatsappMsg += `*Serviço:* ${selectedService.name} (R$ ${selectedService.price})\n`;
+            whatsappMsg += `*Profissional:* ${selectedBarber.name}\n`;
+            whatsappMsg += `*Data:* ${formatDate(selectedDate)}\n`;
+            whatsappMsg += `*Horário:* ${selectedTime}\n`;
 
-            if (phone) {
-                window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
-            }
+            if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(whatsappMsg)}`, '_blank');
 
-            botSay(
-                `🎉 <strong>Agendamento confirmado!</strong><br/><br/>Você foi redirecionado para o WhatsApp para finalizar com nossa equipe.<br/><br/>Até logo, <strong>${clientName}</strong>! 💈`,
-                STEPS.DONE
-            );
-
+            botSay(`🎉 <strong>Agendamento confirmado!</strong><br/><br/>Até logo, <strong>${clientName}</strong>! 💈`, STEPS.DONE);
         } catch (err) {
-            console.error(err);
-            botSay(`❌ Ocorreu um erro ao salvar: <em>${err.message}</em>. Tente novamente ou ligue para nós.`);
+            botSay(`❌ Ocorreu um erro ao salvar. Tente novamente.`);
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    // ── Cancel / restart ──────────────────────────────────────────────────
     const handleCancel = () => {
         userSay('❌ Cancelar');
         setIsVoiceMode(false);
-        botSay(`Sem problemas. Se mudar de ideia ou precisar de outra coisa, é só me chamar!`, STEPS.DONE);
+        botSay(`Sem problemas. Se mudar de ideia, é só me chamar!`, STEPS.DONE);
     };
 
     const handleRestart = () => {
@@ -717,14 +687,9 @@ const BookingChatbot = () => {
         setSelectedTime('');
         setBookedTimes([]);
         setIsVoiceMode(false);
-        // Trigger greeting again
-        setTimeout(() => botSay(
-            `👋 Olá novamente! Posso te ajudar com Agendamentos, Promoções, ou com Planos de Assinatura. O que deseja?`,
-            STEPS.INTENT_SELECTION
-        ), 500);
+        setTimeout(() => botSay(`👋 Olá novamente! O que deseja fazer?`, STEPS.INTENT_SELECTION), 500);
     };
 
-    // ── Available time slots ───────────────────────────────────────────────
     const getAvailableSlots = () => {
         const todayStr = getTodayStr();
         const now = new Date();
@@ -741,47 +706,56 @@ const BookingChatbot = () => {
         });
     };
 
-    // ── Render ────────────────────────────────────────────────────────────
     return (
         <>
-            {/* Floating Button */}
             <button
                 id="chatbot-toggle-btn"
                 className={`chatbot-fab ${isOpen ? 'open' : ''}`}
-                onClick={() => {
-                    setIsOpen(o => !o);
-                    setShowBadge(false);
-                }}
+                onClick={() => { setIsOpen(o => !o); setShowBadge(false); }}
                 aria-label="Agendar com assistente"
             >
                 {isOpen ? <CloseIcon /> : <BotIcon />}
-                {!isOpen && showBadge && (
-                    <span className="chatbot-fab-badge">1</span>
-                )}
+                {!isOpen && showBadge && <span className="chatbot-fab-badge">1</span>}
             </button>
 
-            {/* Chat Window */}
             <div className={`chatbot-window ${isOpen ? 'visible' : ''}`} role="dialog" aria-label="Assistente de Agendamento">
-                {/* Header */}
                 <div className="chatbot-header">
-                    <div className="chatbot-header-avatar">
-                        <BotIcon />
+                    <div className="header-top-row">
+                        <div className="header-left">
+                            {step !== STEPS.GREETING && step !== STEPS.DONE && (
+                                <button className="chatbot-header-back-btn" onClick={handleBack} aria-label="Voltar">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <path d="M19 12H5M12 19l-7-7 7-7" />
+                                    </svg>
+                                    Voltar
+                                </button>
+                            )}
+                            <div className="chatbot-header-avatar"><BotIcon /></div>
+                            <div className="chatbot-header-info">
+                                <span className="chatbot-header-name">
+                                    <ScissorsIcon /> Assistente Virtual
+                                </span>
+                                <span className="chatbot-header-status">
+                                    <span className="chatbot-online-dot" />
+                                    Online agora
+                                </span>
+                            </div>
+                        </div>
+                        <div className="header-actions">
+                            <button className="chatbot-header-audio" onClick={handleAudioToggle} aria-label={isAudioEnabled ? "Mutar voz" : "Ativar voz"}>
+                                <SpeakerIcon muted={!isAudioEnabled} />
+                            </button>
+                            <button className="chatbot-header-close" onClick={() => setIsOpen(false)} aria-label="Fechar chat">
+                                <CloseIcon />
+                            </button>
+                        </div>
                     </div>
-                    <div className="chatbot-header-info">
-                        <span className="chatbot-header-name">
-                            <ScissorsIcon /> Assistente Virtual
-                        </span>
-                        <span className="chatbot-header-status">
-                            <span className="chatbot-online-dot" />
-                            Online agora
-                        </span>
-                    </div>
-                    <button className="chatbot-header-audio" onClick={handleAudioToggle} aria-label={isAudioEnabled ? "Mutar voz" : "Ativar voz"}>
-                        <SpeakerIcon muted={!isAudioEnabled} />
-                    </button>
-                    <button className="chatbot-header-close" onClick={() => setIsOpen(false)} aria-label="Fechar chat">
-                        <CloseIcon />
-                    </button>
+                    {/* Step label inside header for better UX */}
+                    {[STEPS.ASK_NAME, STEPS.ASK_PHONE, STEPS.ASK_SERVICE, STEPS.ASK_BARBER, STEPS.ASK_DATE, STEPS.ASK_TIME].includes(step) && (
+                        <div className="chatbot-nav-step-label">
+                            Etapa {step === STEPS.ASK_NAME ? 1 : step === STEPS.ASK_PHONE ? 2 : step === STEPS.ASK_SERVICE ? 3 : step === STEPS.ASK_BARBER ? 4 : step === STEPS.ASK_DATE ? 5 : step === STEPS.ASK_TIME ? 6 : ''} de 6
+                        </div>
+                    )}
                 </div>
 
                 {/* Progress steps indicator - Only relevant for booking flow */}
@@ -836,7 +810,6 @@ const BookingChatbot = () => {
                     {/* Service selection */}
                     {step === STEPS.ASK_SERVICE && !isTyping && (
                         <div className="chatbot-options-grid service-grid">
-                            <button className="chatbot-back-btn-inline" onClick={handleBack}>⬅️ Voltar</button>
                             {services.map(s => (
                                 <button
                                     key={s.id}
@@ -853,7 +826,6 @@ const BookingChatbot = () => {
                     {/* Barber selection */}
                     {step === STEPS.ASK_BARBER && !isTyping && (
                         <div className="chatbot-options-grid barber-grid">
-                            <button className="chatbot-back-btn-inline" onClick={handleBack}>⬅️ Voltar</button>
                             {barbers.map(b => (
                                 <button
                                     key={b.id}
@@ -876,7 +848,6 @@ const BookingChatbot = () => {
                     {/* Date selection */}
                     {step === STEPS.ASK_DATE && !isTyping && (
                         <div className="chatbot-date-picker">
-                            <button className="chatbot-back-btn-inline" onClick={handleBack} style={{ width: '100%', marginBottom: '10px' }}>⬅️ Escolher outro profissional</button>
                             <input
                                 type="date"
                                 className="chatbot-date-input"
@@ -889,7 +860,6 @@ const BookingChatbot = () => {
                     {/* Time selection */}
                     {step === STEPS.ASK_TIME && !isTyping && selectedDate && (
                         <div className="chatbot-time-grid">
-                            <button className="chatbot-back-btn-inline" onClick={handleBack} style={{ gridColumn: '1 / -1', marginBottom: '10px' }}>⬅️ Voltar para Data</button>
                             {getAvailableSlots().map(({ time, disabled, isBooked, isAfterClose }) => (
                                 <button
                                     key={time}

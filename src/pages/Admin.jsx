@@ -166,6 +166,7 @@ const Admin = () => {
     const [showBellPanel, setShowBellPanel] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [activeAlert, setActiveAlert] = useState(null);
+    const [realtimeStatus, setRealtimeStatus] = useState('connecting');
 
     useEffect(() => {
         setUnreadCount(0);
@@ -323,20 +324,23 @@ const Admin = () => {
     }, [user, refreshAllDataImmediate]);
 
     // Supabase Real-time listener UNIFICADO
+    // Decouple from refreshAllData to avoid constant reconnects
+    const refreshRef = useRef(refreshAllData);
+    useEffect(() => { refreshRef.current = refreshAllData; }, [refreshAllData]);
+
     useEffect(() => {
         if (!isAdmin) return;
 
-        console.log("[Admin] Iniciando Master Realtime Channel");
+        console.log("[Admin] 📡 Iniciando Master Realtime Channel");
         
         const playNotificationSound = () => {
             try {
-                // Mixkit reliable backup SFX
                 const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
                 audio.volume = 0.8;
                 const playPromise = audio.play();
                 if (playPromise !== undefined) {
                     playPromise.catch(error => {
-                        console.warn("[Admin] Som bloqueado. Habilite 'Reprodução Automática' no navegador para alertas sonoros.");
+                        console.warn("[Admin] Som bloqueado pelo navegador.");
                     });
                 }
             } catch(e) { console.warn("[Admin] Falha no áudio:", e); }
@@ -347,9 +351,7 @@ const Admin = () => {
             playNotificationSound();
             
             setNotificationQueue(q => {
-                // Previne duplicação se o ID for exatamente igual
                 if (q.some(n => n.id === notif.id)) return q;
-                
                 setUnreadCount(c => c + 1);
                 setActiveAlert(notif);
                 return [notif, ...q];
@@ -357,58 +359,56 @@ const Admin = () => {
         };
 
         const masterChannel = supabase.channel('admin-master-sync')
+            .on('system', { event: '*' }, (payload) => {
+                console.log("[Admin Realtime] Status do Sistema:", payload);
+                if (payload.status) setRealtimeStatus(payload.status);
+            })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, payload => {
-                console.log("[Master Realtime] Evento recebido (Agendamento):", payload.eventType, payload);
-                
-                const apptId = payload.new?.id || payload.old?.id || Date.now();
-                
+                console.log("[Master Realtime] Evento Agendamento:", payload.eventType);
                 if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
                     showNotification({ 
-                        id: `appt-${apptId}-${Date.now()}`, 
+                        id: `appt-${payload.new?.id || Date.now()}`, 
                         title: '🔔 Novo Agendamento!', 
                         message: `Um novo horário (${payload.new?.time?.slice(0,5)}) foi solicitado.`, 
                         type: 'appointment' 
                     });
                 }
-                setTimeout(() => refreshAllData('appointments'), 150);
+                refreshRef.current('appointments');
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'plan_subscriptions' }, payload => {
-                console.log("[Master Realtime] Evento recebido (Planos):", payload.eventType, payload);
-                
-                const subId = payload.new?.id || payload.old?.id || Date.now();
-                
+                console.log("[Master Realtime] Evento Planos:", payload.eventType);
                 if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'active')) {
                     showNotification({ 
-                        id: `sub-${subId}-${Date.now()}`, 
+                        id: `sub-${payload.new?.id || Date.now()}`, 
                         title: '⭐ Nova Assinatura!', 
                         message: 'Um cliente acaba de aderir ao seu Clube!', 
                         type: 'subscription' 
                     });
                 }
-                setTimeout(() => refreshAllData('subscriptions'), 200);
+                refreshRef.current('subscriptions');
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'promotion_interests' }, payload => {
-                console.log("[Master Realtime] Evento recebido (Promoções):", payload.eventType, payload);
-                
-                const promoId = payload.new?.id || payload.old?.id || Date.now();
-                
+                console.log("[Master Realtime] Evento Promoções:", payload.eventType);
                 if (payload.eventType === 'INSERT') {
                     showNotification({ 
-                        id: `promo-${promoId}-${Date.now()}`, 
+                        id: `promo-${payload.new?.id || Date.now()}`, 
                         title: '🎁 Novo Interesse!', 
                         message: 'Temos um novo cliente interessado em promoções!', 
                         type: 'promo_interest' 
                     });
                 }
-                setTimeout(() => refreshAllData('interests'), 200);
+                refreshRef.current('interests');
             })
-            .subscribe();
+            .subscribe((status, err) => {
+                console.log(`[Admin Realtime] Status da Inscrição: ${status}`, err || '');
+                setRealtimeStatus(status);
+            });
 
         return () => {
             console.log("[Admin] Removendo Master Realtime Channel");
             supabase.removeChannel(masterChannel);
         };
-    }, [isAdmin, refreshAllData]);
+    }, [isAdmin]); // Only rerun if admin status changes
 
     // Auto-dismiss notification after 8 seconds
     useEffect(() => {
@@ -562,10 +562,11 @@ const Admin = () => {
                                     </span>
                                 ) : (
                                     <>
-                                        <span className="server-status-label">Status</span>
-                                        <span className="server-status-value">
-                                            <span className="status-dot pulse-dot"></span>
-                                            Online
+                                        <span className="server-status-label">Realtime</span>
+                                        <span className="server-status-value" title={`Status: ${realtimeStatus}`}>
+                                            <span className={`status-dot ${realtimeStatus === 'SUBSCRIBED' ? 'pulse-dot' : 'offline'}`} 
+                                                  style={{ background: realtimeStatus === 'SUBSCRIBED' ? 'var(--color-success)' : '#ef4444' }} />
+                                            {realtimeStatus === 'SUBSCRIBED' ? 'Conectado' : realtimeStatus === 'connecting' ? 'Conectando...' : 'Offline'}
                                         </span>
                                     </>
                                 )}
