@@ -408,7 +408,6 @@ const Admin = () => {
             console.log("[Admin] Removendo Master Realtime Channel");
             supabase.removeChannel(masterChannel);
         };
-        };
     }, [isAdmin, refreshAllData]);
 
     // Auto-dismiss notification after 8 seconds
